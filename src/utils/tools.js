@@ -95,8 +95,8 @@ function handleStopWheel(e) {
   }
   
   function resetScroller() {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+    const scroller = document.getElementById('popup-content');
+    if (scroller) scroller.scrollTop = 0;
   }
   
   function sleep(ms) {

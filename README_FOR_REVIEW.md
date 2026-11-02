@@ -4,12 +4,12 @@ Build with vue-cli-plugin-chrome-extension-cli
 
 ## Requirements
 
-- Node.js 18.16.1
-- NPM 9.5.1
+- Node.js 22 or newer
+- npm bundled with Node.js
 
 ## Build
 
-### `npm install`
+### `npm ci`
 
 Install all needed node modules.
 

@@ -1,97 +1,50 @@
 <template>
-  <div class="main">
-    <el-row v-loading.fullscreen.lock="loading" :element-loading-background="el_loading_bg">
-      <div>
-        <div id="col">
-          <div v-for="pieceObj in videolist" :key="pieceObj.index">
-            <piece-ele :video="pieceObj"></piece-ele>
-          </div>
-        </div>
-      </div>
-      <a><button class="moreBtn" @click="seeMore">查看全部</button>
-      </a>
-    </el-row>
-  </div>
+  <section class="history-list" :aria-busy="String(loading)">
+    <div class="card-grid">
+      <card-ele v-for="card in cards" :key="card.index" :card-obj="card" />
+    </div>
+    <p v-if="loading" class="list-status" role="status">正在加载…</p>
+    <p v-else-if="error" class="list-status error" role="alert">{{ error }}</p>
+    <p v-else-if="!cards.length" class="list-status">暂无观看记录</p>
+    <button v-if="error" type="button" class="moreBtn" @click="update">重试</button>
+    <button v-else-if="!loading" type="button" class="moreBtn" @click="seeMore">查看全部历史</button>
+  </section>
 </template>
+
 <script>
-import { getHistoryData } from '@/utils/api'
-import PieceEle from "@/components/Elements/PieceEle.vue";
-import { getTimeText, sleep } from "@/utils/tools";
+import { getHistoryData } from '@/utils/api';
+import CardEle from '@/components/Elements/CardEle.vue';
+import { getTimeText } from '@/utils/tools';
+import { historyCard } from '@/utils/history';
 
 export default {
-  name: "HistoryList",
-  components: {
-    PieceEle,
-  },
-  async mounted() {
-    this.update();
-  },
-  props: ["activeTab"],
-  data: function () {
-    return {
-      videolist: [],
-      loading: false,
-    };
-  },
-  computed: {
-    el_loading_bg() {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "rgba(0, 0, 0, 0.3)"
-        : "hsla(0,0%,100%,.9)";
-    },
-  },
+  name: 'HistoryList',
+  components: { CardEle },
+  data: () => ({ cards: [], loading: false, error: '' }),
+  mounted() { this.update(); },
   methods: {
-    seeMore: function () {
-      chrome.tabs.create({ url: "https://www.bilibili.com/account/history" });
-    },
-    genVideoData: function (responseData) {
-      if (!responseData.data?.list) {
-        return;
-      }
-      for (let history of responseData.data.list) {
-        this.videolist.push({
-          index: history.kid,
-          cover: history.cover,
-          link:
-            history.uri === ""
-              ? `https://www.bilibili.com/video/${history.history.bvid}/`
-              : history.uri,
-          date: getTimeText(history.view_at),
-          title: history.title,
-          name: history.author_name,
-        });
-      }
-    },
-    update: async function () {
+    seeMore() { chrome.tabs.create({ url: 'https://www.bilibili.com/account/history' }); },
+    async update() {
+      if (this.loading) return;
       this.loading = true;
-      let responseData = await getHistoryData();
-      this.genVideoData(responseData);
-      sleep(400).then(() => {
-        this.loading = false;
-      });
+      this.error = '';
+      try {
+        const response = await getHistoryData();
+        if (response?.code !== 0 || !Array.isArray(response.data?.list)) throw new Error('history request failed');
+        this.cards = response.data.list.map(item => historyCard(item,
+          item.view_at ? getTimeText(item.view_at) : '')).filter(Boolean);
+      } catch (error) {
+        this.error = '加载失败，请重试';
+      } finally { this.loading = false; }
     },
   },
 };
 </script>
 
 <style scoped>
-html.vivaldi .main {
-  height: 590px;
-  overflow-y: auto;
-}
-
-.main {
-  margin-top: 60px;
-}
-
-.moreBtn {
-  transition: 0.3s;
-  text-align: center;
-  height: 32px;
-  width: 350px;
-  margin-left: 7px;
-  cursor: pointer;
-  border: none;
-  border-radius: 4px;
-}
+.history-list { padding: 14px 12px; }
+.list-status { text-align: center; font-size: 13px; color: var(--muted); padding: 12px 0; }
+.error { color: var(--error); }
+.moreBtn { width: 100%; min-height: 40px; border: 0; border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; margin-top: 14px; }
+.moreBtn:hover { background: var(--hover); }
 </style>
