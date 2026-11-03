@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_extName__",
   "description": "__MSG_desc__",
-  "version": "2.3.11",
+  "version": "2.4.0",
   "default_locale": "zh_CN",
   "permissions": [
     "declarativeNetRequest",
@@ -38,5 +38,6 @@
         "default": "Alt+B"
       }
     }
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxXSY1ya/gNNwj2tPRBDzjJB4t2T/rvxOOYWDDpCEbH3EwxY0njHu1jOJ+qfg5nvkQrXZhhArxZpyHrYI2ehOdsYvjRaxEKNX1CM9FmcPfO4ejBekEjwhmc7wvTjVjhfYCFJE7tg3WD2mfN3hXk/tDcS5iVCiRi7eROumLknoHsIheEvMemA95yEsTl96FpuL+PzNfRQnxmuoOGZlakqxrMHqzhvY0qD0OUh6iqCPw6J1gzrvfO1nJsH6hs3+8gAgzq1OUIYKzCUMOkLCvRZ0/LSXR7F4aCUImU8LCBJec8ansuSHFZlC5RTQ0MHNTBF0DSMJBGaij1e+GQJwH7FM9wIDAQAB"
 }

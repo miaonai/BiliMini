@@ -2,11 +2,9 @@
   <div id="videopanel">
     <header class="toolbar">
       <el-tabs v-model="activeTab" class="header" @tab-click="selectTab">
-        <el-tab-pane name="1"><span slot="label">投稿<el-badge v-show="settings.showVideoBadge && badgeShow.video" is-dot class="label-badge" /></span></el-tab-pane>
-        <el-tab-pane v-if="settings.showBangumi" name="2"><span slot="label">番剧<el-badge v-show="badgeShow.bangumi" is-dot class="label-badge" /></span></el-tab-pane>
-        <el-tab-pane v-if="settings.showLive" name="3"><span slot="label">直播<el-badge v-show="settings.showLiveBadge && badgeShow.live" :value="liveNumStr" class="label-badge" /></span></el-tab-pane>
-        <el-tab-pane v-if="settings.showHistory" name="4" label="历史" />
-        <el-tab-pane v-if="settings.showPopular" name="5" label="热门" />
+        <el-tab-pane v-for="tab in displayedTabs" :key="tab.id" :name="tab.id">
+          <span slot="label">{{ tab.label }}<el-badge v-if="tab.id === '1'" v-show="settings.showVideoBadge && badgeShow.video" is-dot class="label-badge" /><el-badge v-else-if="tab.id === '2'" v-show="badgeShow.bangumi" is-dot class="label-badge" /><el-badge v-else-if="tab.id === '3'" v-show="settings.showLiveBadge && badgeShow.live" :value="liveNumStr" class="label-badge" /></span>
+        </el-tab-pane>
       </el-tabs>
       <button ref="settingsButton" type="button" class="settings-button" aria-label="设置"
         :aria-expanded="String(settingsOpen)" aria-controls="settings-panel" @click="toggleSettings">
@@ -37,7 +35,7 @@ import SettingsPanel from '@/components/SettingsPanel.vue';
 import key from 'keymaster';
 import { sleep, resetScroller } from '@/utils/tools';
 import { getLiveData } from '@/utils/api';
-import { SETTINGS_KEY, DEFAULT_SETTINGS, normalizeSettings, visibleTabs, applyPopupSize } from '@/utils/settings';
+import { SETTINGS_KEY, DEFAULT_SETTINGS, TAB_OPTIONS, normalizeSettings, orderedTabs, visibleTabs, applyPopupSize } from '@/utils/settings';
 
 export default {
   name: 'MainPanel',
@@ -48,7 +46,7 @@ export default {
     const savedTab = localStorage['activeTab'];
     return {
       settings,
-      activeTab: visibleTabs(settings).includes(savedTab) ? savedTab : '1',
+      activeTab: visibleTabs(settings).includes(savedTab) ? savedTab : visibleTabs(settings)[0],
       settingsOpen: false,
       saveError: this.settingsError,
       loggedInStatus: 0,
@@ -58,10 +56,14 @@ export default {
       saveQueue: Promise.resolve(),
     };
   },
+  computed: {
+    displayedTabs() { return orderedTabs(this.settings).filter(tab => !tab.setting || this.settings[tab.setting]); },
+  },
   async mounted() {
-    for (const tab of ['1', '2', '3', '4', '5']) {
-      key(tab, () => {
-        if (this.settingsOpen || !visibleTabs(this.settings).includes(tab)) return;
+    for (let index = 0; index < TAB_OPTIONS.length; index++) {
+      key(String(index + 1), () => {
+        const tab = visibleTabs(this.settings)[index];
+        if (this.settingsOpen || !tab) return;
         this.activeTab = tab;
         this.selectTab();
         return false;
@@ -102,8 +104,8 @@ export default {
       this.settings = normalizeSettings(value);
       applyPopupSize(this.settings);
       if (!visibleTabs(this.settings).includes(this.activeTab)) {
-        this.activeTab = '1';
-        localStorage['activeTab'] = '1';
+        this.activeTab = visibleTabs(this.settings)[0];
+        localStorage['activeTab'] = this.activeTab;
       }
       if (!wasLiveBadgeEnabled && this.settings.showLive && this.settings.showLiveBadge && this.loggedInStatus === 0) this.setLiveBadge();
       const snapshot = { ...this.settings };

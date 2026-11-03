@@ -502,8 +502,93 @@ async function run(browserName, baseURL) {
     await page.reload();
     assert.equal(await page.getByRole('tab', { name: '热门', exact: true }).count(), 0);
     assert.equal(await page.getByRole('tab', { name: /投稿/ }).getAttribute('aria-selected'), 'true');
+
+    // Reorder through the actual drag handle; hidden tabs retain their position
+    // while numeric shortcuts always address the visible order.
+    const tabOrder = () => page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => tab.id.replace('tab-', '')));
+    const rowOrder = () => page.locator('.tab-row').evaluateAll(rows => rows.map(row => row.dataset.tabId));
+    const selectedTab = () => page.locator('[role=tab][aria-selected=true]').getAttribute('id');
+    const dragTab = async (id, target, y) => {
+      // All five rows fit together. Bring both endpoints into view before the
+      // mouse gesture so Playwright does not scroll the source behind the header.
+      await page.locator('#popup-content').evaluate(el => el.scrollTo(0, 0));
+      await page.locator(`[data-tab-id="${id}"] .drag-handle`)
+        .dragTo(page.locator(`[data-tab-id="${target}"]`), { targetPosition: { x: 80, y } });
+    };
+    const moveBefore = (id, target) => dragTab(id, target, 4);
+    const moveAfter = (id, target) => dragTab(id, target, 36);
+    await gear.click();
+    await page.getByRole('button', { name: '恢复默认' }).click();
+    await moveBefore('5', '1');
+    assert.deepEqual(await rowOrder(), ['5', '1', '2', '3', '4']);
+    assert.deepEqual(await tabOrder(), ['5', '1', '2', '3', '4']);
+    assert.equal(await selectedTab(), 'tab-1', 'reordering preserves the selected content');
+    await page.keyboard.press('1');
+    assert.equal(await gear.getAttribute('aria-expanded'), 'true', 'shortcuts remain disabled in settings');
+    assert.equal(await selectedTab(), 'tab-1');
+    await gear.click();
+    await page.keyboard.press('1');
+    assert.equal(await selectedTab(), 'tab-5');
+    await page.keyboard.press('2');
+    assert.equal(await selectedTab(), 'tab-1');
+    await gear.click();
+    await page.getByRole('switch', { name: '番剧', exact: true }).uncheck();
+    await moveAfter('2', '4');
+    assert.deepEqual(await rowOrder(), ['5', '1', '3', '4', '2']);
+    assert.equal(await page.getByRole('switch', { name: '番剧', exact: true }).isChecked(), false);
+    assert.deepEqual(await tabOrder(), ['5', '1', '3', '4']);
+    await gear.click();
+    await page.keyboard.press('3');
+    assert.equal(await selectedTab(), 'tab-3');
+    await page.keyboard.press('4');
+    assert.equal(await selectedTab(), 'tab-4');
+    await page.keyboard.press('5');
+    assert.equal(await selectedTab(), 'tab-4', 'out-of-range shortcuts do nothing');
+    await gear.click();
+    await page.getByRole('switch', { name: '番剧', exact: true }).check();
+    await page.reload();
+    assert.deepEqual(await tabOrder(), ['5', '1', '3', '4', '2']);
+    assert.equal(await selectedTab(), 'tab-4', 'reopening preserves the selected tab by ID');
+    await page.keyboard.press('5');
+    assert.equal(await selectedTab(), 'tab-2');
+    await page.getByText('番剧示例', { exact: true }).waitFor();
+    await gear.click();
+    const postHandle = page.getByRole('button', { name: '调整投稿顺序', exact: true });
+    await postHandle.press('ArrowDown');
+    assert.deepEqual(await rowOrder(), ['5', '3', '1', '4', '2']);
+    assert.equal(await postHandle.evaluate(el => el === document.activeElement), true);
+    await postHandle.press('ArrowUp');
+    assert.deepEqual(await rowOrder(), ['5', '1', '3', '4', '2']);
+    // Cancel a native drag without changing settings or leaving a drop marker.
+    const handleBox = await postHandle.boundingBox();
+    const lastRowBox = await page.locator('[data-tab-id="2"]').boundingBox();
+    await page.mouse.move(handleBox.x + 20, handleBox.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(lastRowBox.x + 80, lastRowBox.y + 36, { steps: 10 });
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    assert.deepEqual(await rowOrder(), ['5', '1', '3', '4', '2']);
+    assert.equal(await page.locator('.dragging, .drop-before, .drop-after').count(), 0);
+    await moveAfter('1', '2');
+    assert.deepEqual(await tabOrder(), ['5', '3', '4', '2', '1']);
+    if (process.env.SCREENSHOT_DIR && browserName === 'edge') {
+      await page.locator('#popup-content').evaluate(el => el.scrollTo(0, 0));
+      await delay(350);
+      await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'settings-tab-order.png') });
+    }
+    await page.evaluate(() => localStorage.removeItem('activeTab'));
+    await page.reload();
+    assert.equal(await selectedTab(), 'tab-5', 'without a saved tab, open the first visible column');
+    await gear.click();
+    await page.getByRole('switch', { name: '热门', exact: true }).uncheck();
+    assert.equal(await selectedTab(), 'tab-3', 'hiding the active tab selects the first remaining column');
+    await page.getByRole('button', { name: '恢复默认' }).click();
+    assert.deepEqual(await rowOrder(), ['1', '2', '3', '4', '5']);
+    assert.deepEqual(await tabOrder(), ['1', '2', '3', '4', '5']);
+    await page.reload();
+    assert.deepEqual(await tabOrder(), ['1', '2', '3', '4', '5']);
     assert.deepEqual(errors, []);
-    console.log(`${browserName}: settings, independent badges, persistence, tab shortcuts, watch-later, responsive layout, themes, pagination, history, popular retry/empty/race and links passed`);
+    console.log(`${browserName}: settings, badges, drag ordering/cancel/persistence, visible-order shortcuts, watch-later, responsive layout, themes, pagination, history and popular passed`);
     await context.close();
   } finally { await browser.close(); }
 }

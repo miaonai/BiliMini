@@ -3,11 +3,24 @@
     <h2 id="settings-title">设置</h2>
     <fieldset>
       <legend>显示栏目</legend>
-      <label v-for="item in tabOptions" :key="item.key" class="setting-row">
-        <span>{{ item.label }}</span>
-        <input type="checkbox" role="switch" class="capsule" :checked="settings[item.key]"
-          @change="change(item.key, $event.target.checked)" />
-      </label>
+      <div v-for="item in tabOptions" :key="item.id" class="setting-row tab-row" :data-tab-id="item.id"
+        :class="{ dragging: draggedTab === item.id, 'drop-before': dropTarget === item.id && !dropAfter, 'drop-after': dropTarget === item.id && dropAfter }"
+        @dragover="dragOver($event, item.id)" @drop="dropTab($event, item.id)">
+        <button type="button" class="drag-handle" draggable="true" :aria-label="'调整' + item.label + '顺序'"
+          title="拖动排序，或用上下方向键调整" @dragstart="startDrag($event, item.id)" @dragend="endDrag"
+          @keydown.up.prevent="moveTab(item.id, -1)" @keydown.down.prevent="moveTab(item.id, 1)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M5 6h14M5 12h14M5 18h14" />
+          </svg>
+        </button>
+        <label v-if="item.setting" class="tab-label">
+          <span>{{ item.label }}</span>
+          <input type="checkbox" role="switch" class="capsule" :checked="settings[item.setting]"
+            @change="change(item.setting, $event.target.checked)" />
+        </label>
+        <div v-else class="tab-label"><span>{{ item.label }}</span><span class="always-visible">始终显示</span></div>
+      </div>
+      <span class="sr-only" role="status" aria-live="polite">{{ orderAnnouncement }}</span>
     </fieldset>
     <fieldset>
       <legend>红点提示</legend>
@@ -68,20 +81,62 @@
 </template>
 
 <script>
+import { orderedTabs } from '@/utils/settings';
+
 export default {
   name: 'SettingsPanel',
   props: ['settings', 'saveError'],
-  data() { return { widthDraft: String(this.settings.popupWidth), tabOptions: [
-    { key: 'showBangumi', label: '番剧' },
-    { key: 'showLive', label: '直播' },
-    { key: 'showHistory', label: '历史' },
-    { key: 'showPopular', label: '热门' },
-  ] }; },
+  data() { return { widthDraft: String(this.settings.popupWidth), draggedTab: '', dropTarget: '', dropAfter: false, orderAnnouncement: '' }; },
+  computed: {
+    tabOptions() { return orderedTabs(this.settings); },
+  },
   watch: {
     'settings.popupWidth'(value) { this.widthDraft = String(value); },
   },
   methods: {
     change(key, value) { this.$emit('change', { ...this.settings, [key]: value }); },
+    startDrag(event, id) {
+      this.draggedTab = id;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', id);
+      event.dataTransfer.setDragImage(event.currentTarget.closest('.tab-row'), 20, 20);
+    },
+    dragOver(event, id) {
+      if (!this.draggedTab) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      this.dropTarget = id === this.draggedTab ? '' : id;
+      const rect = event.currentTarget.getBoundingClientRect();
+      this.dropAfter = event.clientY > rect.top + rect.height / 2;
+    },
+    dropTab(event, id) {
+      if (!this.draggedTab) return;
+      event.preventDefault();
+      this.dragOver(event, id);
+      if (id !== this.draggedTab) {
+        const order = this.settings.tabOrder.filter(tab => tab !== this.draggedTab);
+        order.splice(order.indexOf(id) + (this.dropAfter ? 1 : 0), 0, this.draggedTab);
+        this.saveOrder(order, this.draggedTab);
+      }
+      this.endDrag();
+    },
+    endDrag() { this.draggedTab = ''; this.dropTarget = ''; },
+    moveTab(id, direction) {
+      const order = [...this.settings.tabOrder];
+      const index = order.indexOf(id);
+      const target = index + direction;
+      if (target < 0 || target >= order.length) return;
+      order.splice(index, 1);
+      order.splice(target, 0, id);
+      this.saveOrder(order, id);
+    },
+    saveOrder(order, id) {
+      if (order.every((tab, index) => tab === this.settings.tabOrder[index])) return;
+      const label = this.tabOptions.find(tab => tab.id === id).label;
+      this.change('tabOrder', order);
+      this.orderAnnouncement = `${label}已移至第 ${order.indexOf(id) + 1} 位`;
+      this.$nextTick(() => this.$el.querySelector(`[data-tab-id="${id}"] .drag-handle`).focus());
+    },
     commitWidth() {
       const value = Number(this.widthDraft);
       if (String(this.widthDraft).trim() !== '' && Number.isFinite(value)) {
@@ -103,6 +158,19 @@ h2 { margin: 0 0 12px; font-size: 20px; }
 fieldset { border: 0; padding: 0 0 8px; margin: 0 0 10px; border-bottom: 1px solid var(--border); }
 legend { padding: 0; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
 .setting-row { display: flex; align-items: center; justify-content: space-between; min-height: 40px; gap: 16px; cursor: pointer; }
+.tab-row { position: relative; gap: 4px; cursor: default; }
+.tab-row.dragging { opacity: .5; }
+.tab-row.drop-before::before, .tab-row.drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); pointer-events: none; }
+.tab-row.drop-before::before { top: 0; }
+.tab-row.drop-after::after { bottom: 0; }
+.tab-label { display: flex; flex: 1; align-items: center; justify-content: space-between; min-height: 40px; gap: 16px; }
+label.tab-label { cursor: pointer; }
+.drag-handle { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: grab; }
+.drag-handle:hover { color: var(--text); background: var(--hover); }
+.drag-handle:active { cursor: grabbing; }
+.drag-handle svg { width: 18px; height: 18px; pointer-events: none; }
+.always-visible { font-size: 12px; color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .capsule { appearance: none; flex: 0 0 38px; width: 38px; height: 22px; margin: 0; border-radius: 20px; background: var(--switch-off); cursor: pointer; position: relative; }
 .capsule::before { content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: white; }
 .capsule:checked { background: var(--accent); }

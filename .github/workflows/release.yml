@@ -1,0 +1,99 @@
+name: Release extension
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and release (for example v2.4.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      TEST_BROWSERS: chromium
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify release version
+        run: npm run release:check
+      - run: npm ci
+      - run: npm run lint -- --no-fix
+      - run: npx eslint scripts/*.cjs
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/check-release-version.cjs --built
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+      - run: npm run test:extension
+      - name: Sign CRX and extract matching ZIP
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CRX_PRIVATE_KEY" || { echo 'Missing CRX_PRIVATE_KEY repository secret'; exit 1; }
+          umask 077
+          key_file="$RUNNER_TEMP/bilimini-signing.pem"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$CRX_PRIVATE_KEY" > "$key_file"
+          unset CRX_PRIVATE_KEY
+          chromium_path="$(node -p "require('playwright').chromium.executablePath()")"
+          "$chromium_path" --headless --no-sandbox \
+            --user-data-dir="$RUNNER_TEMP/crx-pack-profile" \
+            --pack-extension="$GITHUB_WORKSPACE/dist" \
+            --pack-extension-key="$key_file"
+          node scripts/package-release.cjs
+      - name: Verify ZIP contents and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, zipfile
+          archive = next(pathlib.Path('release').glob('*.zip'))
+          with zipfile.ZipFile(archive) as package:
+              assert package.testzip() is None, 'Corrupt ZIP entry'
+              names = package.namelist()
+              assert all(not name.startswith('/') and '..' not in pathlib.PurePosixPath(name).parts for name in names)
+              assert not any(name.endswith(('.pem', '.map', '.DS_Store')) or name.startswith(('.git/', 'node_modules/')) for name in names)
+              assert json.loads(package.read('manifest.json')) == json.loads(pathlib.Path('dist/manifest.json').read_text())
+              for required in ['popup.html', 'popup.js', 'background.js', '_locales/zh_CN/messages.json', 'icons/128.png']:
+                  assert required in names, f'Missing {required}'
+          print(f'ZIP verified: {archive.name}')
+          PY
+          (cd release && sha256sum --check SHA256SUMS.txt)
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="docs/releases/$RELEASE_TAG.md"
+          test -f "$notes"
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > "$RUNNER_TEMP/release-draft"; then
+            test "$(cat "$RUNNER_TEMP/release-draft")" = true || { echo 'Release is already published; refusing to overwrite assets'; exit 1; }
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "BiliMini $RELEASE_TAG" --notes-file "$notes"
+          fi
+          gh release upload "$RELEASE_TAG" release/*.crx release/*.zip release/SHA256SUMS.txt --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest

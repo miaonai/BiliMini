@@ -29,5 +29,7 @@ pnpm-debug.log*
 # Shell script
 *.sh
 
-# Github action
-.github
+# Release output and private signing keys
+/release
+*.crx
+*.pem

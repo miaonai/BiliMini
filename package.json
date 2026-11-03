@@ -1,6 +1,6 @@
 {
   "name": "bilimini",
-  "version": "0.1.0",
+  "version": "2.4.0",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -11,6 +11,7 @@
     "test:extension": "node tests/extension.browser.js",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
+    "release:check": "node scripts/check-release-version.cjs",
     "lint": "vue-cli-service lint",
     "build-watch": "vue-cli-service  --env.NODE_ENV=development build-watch --mode development"
   },

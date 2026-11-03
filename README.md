@@ -6,6 +6,10 @@ Bilibili辅助扩展，用于提示并快速查看更新。
 
 ### 安装
 
+**GitHub 发行版（Chrome / Edge）**
+
+从 [Releases](https://github.com/miaonai/BiliMini/releases/latest) 下载 ZIP，解压后在扩展管理页开启开发者模式，选择“加载已解压的扩展”。也提供 CRX3 签名包，其安装受浏览器策略限制。GitHub 版使用独立扩展 ID，与以下商店版本分别安装。
+
 **从浏览器扩展商店下载**
 
 [![Firefox](https://img.shields.io/amo/v/bilimini.svg?label=Mozilla%20Firefox)](https://addons.mozilla.org/zh-CN/firefox/addon/bilimini/)
@@ -22,8 +26,9 @@ Bilibili辅助扩展，用于提示并快速查看更新。
 - 支持添加和取消稍后再看
 - 支持Tab切换、滚动加载
 - Tab更新提示
-- 快捷键操作（Alt+B / Option+B弹出，1–5 切换投稿、番剧、直播、历史、热门）
+- 快捷键操作（Alt+B / Option+B弹出，数字键按当前显示栏目的顺序切换）
 - 设置：独立显示或隐藏番剧、直播、历史、热门栏目
+- 拖动栏目名称前的三横条调整顺序，自动保存；隐藏的栏目不占用快捷键
 - 可分别关闭投稿页和直播页的红点提示
 - 热门页沿用投稿页卡片布局，支持滚动加载和稍后再看
 - 可隐藏投稿中的充电专属视频
@@ -77,16 +82,24 @@ Bilibili辅助扩展，用于提示并快速查看更新。
 
     export NODE_PLATFORM=firefox
 
+### 发布 GitHub 发行版
+
+同步修改 `package.json`、`package-lock.json` 和两个 manifest 的版本号，补充 `docs/releases/v版本号.md`，并运行 `npm run release:check`。提交后推送对应的 `v版本号` 标签，`Release extension` 工作流会测试、构建并发布 CRX、ZIP 和校验文件。失败的流程可重跑，或从 Actions 手动选择已有标签；已发布资产不会被覆盖。
+
+CRX 使用仓库 Secret `CRX_PRIVATE_KEY` 签名，Chrome manifest 中的 `key` 是对应公钥。后续版本应保留同一密钥对，以保持扩展 ID。私钥不应提交到仓库或上传为发行资产。
+
 ### 更新
 
-**2026-11-03（Edge / Chrome，开发版）**
+**2026-11-03：版本 2.4.0（Edge / Chrome）**
 
+- 设置支持拖动排列栏目，数字快捷键跟随已显示栏目的顺序
 - 新增综合热门页，以及投稿页、直播页独立的红点提示开关
 - 新增设置，可隐藏栏目、充电专属视频和稍后再看按钮
 - 支持调整宽度、自适应或手动 1–4 列、隐藏滚动条
 - 视频卡片显示播放量、弹幕数和时长；历史卡片显示观看进度
 - 修复切换页面时顶栏晃动、筛选后翻页和快速切换栏目时的数据混入
 - 更新依赖，补充逻辑和浏览器测试
+- GitHub Actions 自动构建、验证并发布 CRX、ZIP 和 SHA-256 校验文件
 
 **2026-07-30: 版本2.3.11（仅Chrome商店）**
 

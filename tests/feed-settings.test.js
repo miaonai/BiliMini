@@ -132,6 +132,32 @@ test('columns default to automatic, support manual 1–4 and reject invalid save
   assert.equal(normalizeSettings({ hideScrollbar: true }).hideScrollbar, true);
 });
 
+test('tab order migrates, removes invalid or repeated IDs and appends missing tabs', async () => {
+  const { DEFAULT_SETTINGS, normalizeSettings, orderedTabs } = await load('settings.js');
+  for (const tabOrder of [undefined, null, '5,1', {}, []]) {
+    assert.deepEqual(normalizeSettings({ tabOrder }).tabOrder, ['1', '2', '3', '4', '5']);
+  }
+  const saved = ['5', '3', '5', 'bad', 1, null];
+  const settings = normalizeSettings({ tabOrder: saved });
+  assert.deepEqual(settings.tabOrder, ['5', '3', '1', '2', '4']);
+  assert.deepEqual(orderedTabs(settings).map(tab => tab.label), ['热门', '直播', '投稿', '番剧', '历史']);
+  settings.tabOrder.reverse();
+  assert.deepEqual(saved, ['5', '3', '5', 'bad', 1, null]);
+  assert.deepEqual(DEFAULT_SETTINGS.tabOrder, ['1', '2', '3', '4', '5']);
+});
+
+test('visible tab positions skip hidden columns and restore their saved positions', async () => {
+  const { normalizeSettings, visibleTabs } = await load('settings.js');
+  const settings = normalizeSettings({ tabOrder: ['5', '3', '4', '2', '1'], showLive: false, showBangumi: false });
+  assert.deepEqual(visibleTabs(settings), ['5', '4', '1']);
+  settings.showLive = true;
+  assert.deepEqual(visibleTabs(settings), ['5', '3', '4', '1']);
+  settings.showPopular = false;
+  settings.showHistory = false;
+  settings.showLive = false;
+  assert.deepEqual(visibleTabs(settings), ['1']);
+});
+
 test('history progress covers completed, partial, zero and missing values', async () => {
   const { watchProgress, formatDuration } = await load('history.js');
   assert.deepEqual(watchProgress(90, 360), { percent: 25, text: '已看 01:30', label: '已看 01:30 / 06:00' });

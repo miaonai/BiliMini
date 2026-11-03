@@ -1,6 +1,15 @@
 export const SETTINGS_KEY = 'popupSettings';
 
+export const TAB_OPTIONS = Object.freeze([
+  { id: '1', label: '投稿' },
+  { id: '2', label: '番剧', setting: 'showBangumi' },
+  { id: '3', label: '直播', setting: 'showLive' },
+  { id: '4', label: '历史', setting: 'showHistory' },
+  { id: '5', label: '热门', setting: 'showPopular' },
+]);
+
 export const DEFAULT_SETTINGS = Object.freeze({
+  tabOrder: Object.freeze(TAB_OPTIONS.map(tab => tab.id)),
   showBangumi: true,
   showLive: true,
   showHistory: true,
@@ -28,6 +37,10 @@ export function normalizeSettings(value) {
     }
   }
   if (['auto', 1, 2, 3, 4].includes(source.columns)) settings.columns = source.columns;
+  const savedOrder = Array.isArray(source.tabOrder) ? source.tabOrder : [];
+  // Keep valid saved positions, remove duplicates and append missing/new tabs.
+  settings.tabOrder = [...new Set([...savedOrder, ...DEFAULT_SETTINGS.tabOrder])]
+    .filter(id => DEFAULT_SETTINGS.tabOrder.includes(id));
   return settings;
 }
 
@@ -37,10 +50,12 @@ export function columnCount(settings) {
     : settings.columns;
 }
 
+export function orderedTabs(settings) {
+  return (settings.tabOrder || DEFAULT_SETTINGS.tabOrder).map(id => TAB_OPTIONS.find(tab => tab.id === id));
+}
+
 export function visibleTabs(settings) {
-  return ['1', ...(settings.showBangumi ? ['2'] : []),
-    ...(settings.showLive ? ['3'] : []), ...(settings.showHistory ? ['4'] : []),
-    ...(settings.showPopular ? ['5'] : [])];
+  return orderedTabs(settings).filter(tab => !tab.setting || settings[tab.setting]).map(tab => tab.id);
 }
 
 export function applyPopupSize(settings) {
