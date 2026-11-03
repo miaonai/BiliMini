@@ -23,8 +23,9 @@ async function checkNew(resetBadge = false) {
   //动态数量
   let updateNum = 0;
   let currentBaseline = undefined;
-  chrome.storage.local.get(['updateBaseline'], function (result) {
+  chrome.storage.local.get(['updateBaseline', 'popupSettings'], function (result) {
     currentBaseline = result.updateBaseline;
+    const hideChargeOnly = result.popupSettings?.hideChargeOnly === true;
     //重置角标或首次打开时更新存储
     if (resetBadge || !currentBaseline) {
       chrome.storage.local.set({ "updateBaseline": data.data.items[0].id_str }, function () {
@@ -42,8 +43,12 @@ async function checkNew(resetBadge = false) {
         if (currentBaseline !== item.id_str) {
           console.log(item.type)
           if (item.type === 'DYNAMIC_TYPE_AV') {
-            updateNum += 1
-            videoNum += 1;
+            // 与投稿列表使用相同的充电专属标识，隐藏的视频不计入提醒。
+            const isChargeOnly = item.modules?.module_dynamic?.major?.archive?.badge?.text === '充电专属';
+            if (!hideChargeOnly || !isChargeOnly) {
+              updateNum += 1
+              videoNum += 1;
+            }
           }
           if (item.type === 'DYNAMIC_TYPE_PGC_UNION') {
             updateNum += 1
