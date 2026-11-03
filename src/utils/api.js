@@ -38,6 +38,11 @@ const getDynamicData = async function (type, updateBaseline = false, offset = fa
     return responseData;
 }
 
+// 获取综合热门，与官方热门页使用同一分页接口。
+const getPopularData = async function (page = 1, pageSize = 20) {
+    return handleRequest(`https://api.bilibili.com/x/web-interface/popular?pn=${page}&ps=${pageSize}`);
+}
+
 //获取稍后再看
 const getToWatchData = async function () {
     const responseData= await handleRequest('https://api.bilibili.com/x/v2/history/toview');
@@ -71,13 +76,17 @@ const getLiveData = async function (page = 1, pageSize = 10) {
 }
 
 //获取历史记录
-const getHistoryData = async function () {
-    const responseData= await handleRequest(`https://api.bilibili.com/x/web-interface/history/cursor?type=archive&ps=20`)
+const getHistoryData = async function (cursor = null) {
+    const params = new URLSearchParams({ type: 'archive', ps: 20,
+        max: cursor?.max || 0, view_at: cursor?.view_at || 0, business: cursor?.business || '',
+    });
+    const responseData= await handleRequest(`https://api.bilibili.com/x/web-interface/history/cursor?${params}`)
     return responseData;
 }
 
 export {
     getDynamicData,
+    getPopularData,
     getToWatchData,
     addToWatchData,
     delTowatchData,

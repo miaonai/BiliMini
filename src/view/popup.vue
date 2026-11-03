@@ -34,6 +34,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .header .el-tabs__active-bar { background: var(--accent); }
 .header .el-tabs__content { display: none; }
 .label-badge { line-height: 1; }
+@media (max-width: 440px) {
+  .header .el-tabs__item { font-size: 14px; padding: 0 10px; }
+}
 @media (prefers-color-scheme: dark) {
   :root { --background: #111; --surface: #242424; --text: #e6e6e6; --muted: #aaaeb5; --border: #383838; --accent: #63b3ff; --hover: #303d4a; --switch-off: #636971; --error: #ff9090; }
   body { --scrollbar-thumb: #ffffff24; --scrollbar-hover: #ffffff3d; }

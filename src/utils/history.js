@@ -1,3 +1,36 @@
+// Device codes follow Bilibili's history page, also documented in Gate:
+// https://github.com/magicdawn/Bilibili-Gate/blob/main/src/modules/rec-services/history/enums.tsx
+export function watchDevice(dt) {
+  const type = { 1: 'phone', 2: 'computer', 3: 'phone', 4: 'tablet', 5: 'phone',
+    6: 'tablet', 7: 'phone', 8: 'car', 9: 'speaker', 10: 'tablet', 11: 'tv',
+    12: 'phone', 13: 'tablet', 14: 'computer', 33: 'tv' }[dt] || 'unknown';
+  const label = { phone: '手机端观看', computer: '电脑端观看', tablet: '平板端观看',
+    car: '车载端观看', speaker: '智能音箱端观看', tv: '电视端观看', unknown: '未知观看平台' }[type];
+  return { type, label };
+}
+
+export function createHistoryState() {
+  return { cards: [], cursor: null, loading: false, loaded: false, noMore: false, error: '' };
+}
+
+export function appendHistoryPage(state, data, formatViewedAt) {
+  const seen = new Set(state.cards.map(card => card.index));
+  for (const item of data.list) {
+    const card = historyCard(item, item.view_at ? formatViewedAt(item.view_at) : '');
+    if (!card || seen.has(card.index)) continue;
+    seen.add(card.index);
+    state.cards.push(card);
+  }
+  const cursor = data.cursor;
+  const sameCursor = state.cursor && cursor && ['max', 'view_at', 'business']
+    .every(key => String(state.cursor[key] ?? '') === String(cursor[key] ?? ''));
+  // A short page can still have a successor. Stop on an empty page or a
+  // missing/non-advancing cursor, so a repeated response cannot loop forever.
+  state.noMore = !data.list.length || !cursor || (!Number(cursor.max) && !Number(cursor.view_at)) || Boolean(sameCursor);
+  state.cursor = cursor ? { max: cursor.max, view_at: cursor.view_at, business: cursor.business } : null;
+  state.loaded = true;
+}
+
 export function formatDuration(seconds) {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '';
   const value = Math.floor(seconds);
@@ -48,6 +81,7 @@ export function historyCard(item, viewedAt) {
     up_title: item.author_name || item.show_title || '',
     up_cover: item.author_face || '',
     viewed_at: viewedAt,
+    watch_device: watchDevice(history.dt),
     // Gate computes watched progress for archive history. Other business types
     // retain their destination and duration without inferring completion.
     watch_progress: history.business === 'archive' ? watchProgress(item.progress, item.duration) : null,

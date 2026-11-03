@@ -7,7 +7,7 @@
     <p v-if="current.loading" class="list-status" role="status">正在加载…</p>
     <p v-else-if="current.error" class="list-status error" role="alert">{{ current.error }}</p>
     <p v-else-if="!cards.length && current.loaded" class="list-status">
-      {{ current.cards.length ? '当前已加载的视频均已隐藏' : '暂无更新' }}
+      {{ current.cards.length ? '当前已加载的视频均已隐藏' : activeTab === '5' ? '暂无热门视频' : '暂无更新' }}
     </p>
     <p v-else-if="current.noMore" class="list-status">没有更多了</p>
     <button v-if="!current.noMore || current.error" type="button" class="moreBtn" :disabled="current.loading"
@@ -18,16 +18,17 @@
 
 <script>
 import CardEle from '@/components/Elements/CardEle.vue';
-import { getToWatchData, getDynamicData, getLiveData } from '@/utils/api';
+import { getToWatchData, getDynamicData, getLiveData, getPopularData } from '@/utils/api';
 import { resetScroller } from '@/utils/tools';
 import { createFeedState, appendDynamicPage, appendLivePage, visibleCards } from '@/utils/feed';
+import { appendPopularPage } from '@/utils/popular';
 
 export default {
   name: 'DynamicList',
   components: { CardEle },
   props: ['activeTab', 'settings', 'enabled'],
   data: () => ({
-    feeds: { '1': createFeedState(), '2': createFeedState(), '3': createFeedState() },
+    feeds: { '1': createFeedState(), '2': createFeedState(), '3': createFeedState(), '5': createFeedState() },
     toWatchAids: [],
     watchReady: null,
     autoPages: 0,
@@ -35,7 +36,7 @@ export default {
   computed: {
     current() { return this.feeds[this.activeTab] || this.feeds['1']; },
     cards() { return visibleCards(this.current.cards, this.settings.hideChargeOnly); },
-    moreText() { return { '1': '更多投稿动态', '2': '更多番剧动态', '3': '全部直播' }[this.activeTab]; },
+    moreText() { return { '1': '更多投稿动态', '2': '更多番剧动态', '3': '全部直播', '5': '更多热门视频' }[this.activeTab]; },
   },
   mounted() {
     this.scroller = document.getElementById('popup-content');
@@ -64,7 +65,7 @@ export default {
   },
   methods: {
     seeMore() {
-      const url = { '1': 'https://t.bilibili.com/', '2': 'https://t.bilibili.com/?tab=pgc', '3': 'https://live.bilibili.com/' }[this.activeTab];
+      const url = { '1': 'https://t.bilibili.com/', '2': 'https://t.bilibili.com/?tab=pgc', '3': 'https://live.bilibili.com/', '5': 'https://www.bilibili.com/v/popular/all' }[this.activeTab];
       chrome.tabs.create({ url });
     },
     nearBottom() {
@@ -97,12 +98,13 @@ export default {
       state.error = '';
       try {
         await this.watchReady;
-        const response = tab === '3' ? await getLiveData(state.page) :
+        const response = tab === '5' ? await getPopularData(state.page) : tab === '3' ? await getLiveData(state.page) :
           await getDynamicData(tab === '1' ? 'video' : 'pgc', false, loadMore ? state.offset : false);
         if (!response || response.code !== 0 || !response.data) throw new Error('feed request failed');
         // Capture the requested tab before awaiting: switching tabs must never
         // put a video response into the live or bangumi list.
-        if (tab === '3') appendLivePage(state, response.data);
+        if (tab === '5') appendPopularPage(state, response.data, this.toWatchAids);
+        else if (tab === '3') appendLivePage(state, response.data);
         else appendDynamicPage(state, response.data, this.toWatchAids);
         state.loaded = true;
       } catch (error) {

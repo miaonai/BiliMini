@@ -2,10 +2,11 @@
   <div id="videopanel">
     <header class="toolbar">
       <el-tabs v-model="activeTab" class="header" @tab-click="selectTab">
-        <el-tab-pane name="1"><span slot="label">投稿<el-badge v-show="badgeShow.video" is-dot class="label-badge" /></span></el-tab-pane>
+        <el-tab-pane name="1"><span slot="label">投稿<el-badge v-show="settings.showVideoBadge && badgeShow.video" is-dot class="label-badge" /></span></el-tab-pane>
         <el-tab-pane v-if="settings.showBangumi" name="2"><span slot="label">番剧<el-badge v-show="badgeShow.bangumi" is-dot class="label-badge" /></span></el-tab-pane>
-        <el-tab-pane v-if="settings.showLive" name="3"><span slot="label">直播<el-badge v-show="badgeShow.live" :value="liveNumStr" class="label-badge" /></span></el-tab-pane>
+        <el-tab-pane v-if="settings.showLive" name="3"><span slot="label">直播<el-badge v-show="settings.showLiveBadge && badgeShow.live" :value="liveNumStr" class="label-badge" /></span></el-tab-pane>
         <el-tab-pane v-if="settings.showHistory" name="4" label="历史" />
+        <el-tab-pane v-if="settings.showPopular" name="5" label="热门" />
       </el-tabs>
       <button ref="settingsButton" type="button" class="settings-button" aria-label="设置"
         :aria-expanded="String(settingsOpen)" aria-controls="settings-panel" @click="toggleSettings">
@@ -20,10 +21,10 @@
       @change="changeSettings" @reset="resetSettings" />
     <div v-show="!settingsOpen">
       <p v-if="!permissionGranted" role="alert" class="notice">缺少 API 权限，请在浏览器扩展设置中授权后重试。</p>
-      <p v-else-if="loggedInStatus === -101" role="alert" class="notice">尚未登录 Bilibili，<a href="https://passport.bilibili.com/login" @click.prevent="openLogin">登录</a>后再试。</p>
-      <p v-else-if="loggedInStatus !== 0" role="alert" class="notice">暂时无法获取登录状态，请稍后重试。</p>
+      <p v-else-if="activeTab !== '5' && loggedInStatus === -101" role="alert" class="notice">尚未登录 Bilibili，<a href="https://passport.bilibili.com/login" @click.prevent="openLogin">登录</a>后再试。</p>
+      <p v-else-if="activeTab !== '5' && loggedInStatus !== 0" role="alert" class="notice">暂时无法获取登录状态，请稍后重试。</p>
       <dynamic-list v-show="activeTab !== '4'" :active-tab="activeTab" :settings="settings" :enabled="!settingsOpen && activeTab !== '4'" />
-      <history-list v-if="settings.showHistory && activeTab === '4'" />
+      <history-list v-if="settings.showHistory && activeTab === '4'" :enabled="!settingsOpen" />
     </div>
     </main>
   </div>
@@ -58,7 +59,7 @@ export default {
     };
   },
   async mounted() {
-    for (const tab of ['1', '2', '3', '4']) {
+    for (const tab of ['1', '2', '3', '4', '5']) {
       key(tab, () => {
         if (this.settingsOpen || !visibleTabs(this.settings).includes(tab)) return;
         this.activeTab = tab;
@@ -77,13 +78,13 @@ export default {
       this.badgeShow.bangumi = nums?.bangumi > 0;
       await sleep(1200);
       this.loggedInStatus = await chrome.runtime.sendMessage({ getLoginStatus: true });
-      if (this.loggedInStatus === 0 && this.settings.showLive) this.setLiveBadge();
+      if (this.loggedInStatus === 0 && this.settings.showLive && this.settings.showLiveBadge) this.setLiveBadge();
     } catch (error) {
       this.loggedInStatus = -1;
     }
   },
   beforeDestroy() {
-    ['1', '2', '3', '4', 'esc'].forEach(tab => key.unbind(tab));
+    ['1', '2', '3', '4', '5', 'esc'].forEach(tab => key.unbind(tab));
   },
   methods: {
     selectTab() {
@@ -97,14 +98,14 @@ export default {
       if (!this.settingsOpen) this.$refs.settingsButton.focus();
     },
     changeSettings(value) {
-      const wasLiveVisible = this.settings.showLive;
+      const wasLiveBadgeEnabled = this.settings.showLive && this.settings.showLiveBadge;
       this.settings = normalizeSettings(value);
       applyPopupSize(this.settings);
       if (!visibleTabs(this.settings).includes(this.activeTab)) {
         this.activeTab = '1';
         localStorage['activeTab'] = '1';
       }
-      if (!wasLiveVisible && this.settings.showLive && this.loggedInStatus === 0) this.setLiveBadge();
+      if (!wasLiveBadgeEnabled && this.settings.showLive && this.settings.showLiveBadge && this.loggedInStatus === 0) this.setLiveBadge();
       const snapshot = { ...this.settings };
       // Serialize slider writes so the last change is also the last saved value.
       this.saveQueue = this.saveQueue.then(() => chrome.storage.local.set({ [SETTINGS_KEY]: snapshot }))

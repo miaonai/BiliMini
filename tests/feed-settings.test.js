@@ -92,13 +92,30 @@ test('live page keys remain unique across pages', async () => {
 test('settings migrate missing fields, clamp popup dimensions and ignore corrupt values', async () => {
   const { DEFAULT_SETTINGS, normalizeSettings, visibleTabs } = await load('settings.js');
   assert.deepEqual(normalizeSettings(null), DEFAULT_SETTINGS);
-  const settings = normalizeSettings({ showBangumi: false, showLive: false, showHistory: false, popupWidth: 900, popupHeight: 10, hideChargeOnly: 'true' });
+  const settings = normalizeSettings({ showBangumi: false, showLive: false, showHistory: false, showPopular: false, popupWidth: 900, popupHeight: 10, hideChargeOnly: 'true' });
   assert.deepEqual(visibleTabs(settings), ['1']);
   assert.equal(settings.popupWidth, 800);
   assert.equal('popupHeight' in settings, false);
   assert.equal(settings.hideChargeOnly, false);
   assert.equal(normalizeSettings({ popupWidth: NaN }).popupWidth, 560);
   assert.equal('popupHeight' in normalizeSettings({ popupHeight: 400 }), false);
+});
+
+test('badge preferences migrate enabled and remain independent of tabs and each other', async () => {
+  const { normalizeSettings, visibleTabs } = await load('settings.js');
+  const defaults = normalizeSettings({ showLive: false });
+  assert.equal(defaults.showVideoBadge, true);
+  assert.equal(defaults.showLiveBadge, true);
+  assert.equal(defaults.showPopular, true);
+  for (const showVideoBadge of [false, true]) {
+    for (const showLiveBadge of [false, true]) {
+      const settings = normalizeSettings({ showVideoBadge, showLiveBadge });
+      assert.equal(settings.showVideoBadge, showVideoBadge);
+      assert.equal(settings.showLiveBadge, showLiveBadge);
+      assert.deepEqual(visibleTabs(settings), ['1', '2', '3', '4', '5']);
+    }
+  }
+  assert.equal(normalizeSettings({ showVideoBadge: 'false', showLiveBadge: null }).showVideoBadge, true);
 });
 
 test('columns default to automatic, support manual 1–4 and reject invalid saved values', async () => {

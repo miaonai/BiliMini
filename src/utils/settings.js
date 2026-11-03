@@ -4,6 +4,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showBangumi: true,
   showLive: true,
   showHistory: true,
+  showPopular: true,
+  showVideoBadge: true,
+  showLiveBadge: true,
   hideChargeOnly: false,
   showWatchLater: true,
   hideScrollbar: false,
@@ -36,7 +39,8 @@ export function columnCount(settings) {
 
 export function visibleTabs(settings) {
   return ['1', ...(settings.showBangumi ? ['2'] : []),
-    ...(settings.showLive ? ['3'] : []), ...(settings.showHistory ? ['4'] : [])];
+    ...(settings.showLive ? ['3'] : []), ...(settings.showHistory ? ['4'] : []),
+    ...(settings.showPopular ? ['5'] : [])];
 }
 
 export function applyPopupSize(settings) {

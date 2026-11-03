@@ -43,7 +43,35 @@
         </span>
         <span class="up-name">{{ extraAuthors && extraAuthors.length ? '联合投稿' : cardObj.up_title }}</span>
       </component>
-      <p v-if="cardObj.viewed_at" class="viewed-at">{{ cardObj.viewed_at }}</p>
+      <p v-if="cardObj.viewed_at || cardObj.watch_device" class="viewed-at">
+        <span class="viewed-time">{{ cardObj.viewed_at }}</span>
+        <span v-if="cardObj.watch_device" class="watch-device" role="img"
+          :title="cardObj.watch_device.label" :aria-label="cardObj.watch_device.label">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <g v-if="cardObj.watch_device.type === 'computer'">
+              <rect x="3" y="4" width="18" height="13" rx="2" /><path d="M12 17v4m-5 0h10" />
+            </g>
+            <g v-else-if="cardObj.watch_device.type === 'phone'">
+              <rect x="6" y="2" width="12" height="20" rx="2" /><path d="M10 18h4" />
+            </g>
+            <g v-else-if="cardObj.watch_device.type === 'tablet'">
+              <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M10 17h4" />
+            </g>
+            <g v-else-if="cardObj.watch_device.type === 'tv'">
+              <rect x="3" y="6" width="18" height="13" rx="2" /><path d="m8 2 4 4 4-4M7 19v3m10-3v3" />
+            </g>
+            <g v-else-if="cardObj.watch_device.type === 'car'">
+              <path d="m5 10 2-6h10l2 6M3 17v3m18-3v3M6 13h2m8 0h2" /><rect x="3" y="10" width="18" height="7" rx="2" />
+            </g>
+            <g v-else-if="cardObj.watch_device.type === 'speaker'">
+              <rect x="5" y="2" width="14" height="20" rx="2" /><path d="M8 6h8" /><circle cx="12" cy="15" r="3" />
+            </g>
+            <g v-else>
+              <rect x="5" y="2" width="14" height="20" rx="2" /><path d="M10 8a2 2 0 1 1 3 1.7c-1 .5-1 1.3-1 2.3m0 4h.01" />
+            </g>
+          </svg>
+        </span>
+      </p>
       <p v-if="watchError" class="watch-error" role="alert">{{ watchError }}</p>
     </div>
   </article>
@@ -98,7 +126,10 @@ export default {
 .watched-text { white-space: nowrap; }
 .watch-progress { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: #ffffff40; pointer-events: none; }
 .watch-progress span { display: block; height: 100%; background: var(--accent); }
-.viewed-at { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+.viewed-at { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+.viewed-time { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-device { display: inline-flex; flex-shrink: 0; margin-left: auto; }
+.watch-device svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .show-text { position: absolute; right: 6px; top: 6px; max-width: calc(100% - 58px); padding: 3px 6px; border-radius: 4px; background: #000b; color: #fff; font-size: 11px; opacity: 0; pointer-events: none; }
 .watch-later { position: absolute; left: 4px; top: 4px; width: 40px; height: 40px; display: grid; place-items: center; padding: 8px; border: 0; border-radius: 6px; background: #000b; color: #fff; cursor: pointer; opacity: 0; }
 .watch-later svg { width: 24px; height: 24px; }

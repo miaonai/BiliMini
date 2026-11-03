@@ -55,6 +55,20 @@ async function run(browserName, baseURL) {
     let failFeed = false;
     let allCharge = false;
     let delayVideo = false;
+    let failHistory = false;
+    let failPopular = false;
+    let delayPopular = false;
+    let emptyPopular = false;
+    const popularRequests = [];
+    const popularItem = aid => ({ aid, bvid: `BVpopular${aid}`, title: `热门视频示例 ${aid}`,
+      pic: artwork(`POPULAR ${aid}`), owner: { mid: 1, name: '热门 UP 主', face: artwork('UP') },
+      stat: { view: 12345, danmaku: 456 }, duration: 3723 });
+    const historyRequests = [];
+    const historyTime = Math.floor(Date.now() / 1000);
+    const historyItem = (index, progress) => ({ kid: index + 1, cover: artwork('历史'), uri: '',
+      history: { bvid: `BV${index + 1}`, business: 'archive', page: index === 0 ? 2 : 1, dt: [2, 3, 6, 33, 99][index] },
+      progress, duration: 360, title: `历史记录示例 ${index + 1}`, author_mid: 1,
+      author_face: artwork('UP'), author_name: '示例 UP 主', view_at: historyTime - index });
     await context.route('https://**.bilibili.com/**', async route => {
       const url = new URL(route.request().url());
       requests.push(url.href);
@@ -72,12 +86,25 @@ async function run(browserName, baseURL) {
         } else {
           data = { has_more: false, offset: 'opaque-end', items: [video(7)] };
         }
+      } else if (url.pathname.endsWith('/popular')) {
+        popularRequests.push(url.searchParams.get('pn'));
+        if (delayPopular) await delay(180);
+        if (failPopular) { await route.fulfill({ json: { code: -500, data: null } }); return; }
+        data = emptyPopular ? { list: [], no_more: true } : url.searchParams.get('pn') === '1'
+          ? { list: Array.from({ length: 6 }, (_, i) => popularItem(i + 1)), no_more: false }
+          : { list: [popularItem(6), popularItem(7)], no_more: true };
       } else if (url.pathname.endsWith('/feed_list')) {
         data = { list: [{ roomid: 1, uid: 1, title: '直播示例', link: 'https://live.bilibili.com/1', uname: '主播', pic: artwork('直播'), face: artwork('UP'), watched_show: { text_large: '200 人看过' } }] };
       } else if (url.pathname.endsWith('/history/cursor')) {
-        data = { list: [90, -1, 0, undefined].map((progress, index) => ({ kid: index + 1, cover: artwork('历史'), uri: '',
-          history: { bvid: `BV${index + 1}`, business: 'archive', page: index === 0 ? 2 : 1 }, progress, duration: 360,
-          title: `历史记录示例 ${index + 1}`, author_mid: 1, author_face: artwork('UP'), author_name: '示例 UP 主', view_at: Math.floor(Date.now() / 1000) })) };
+        historyRequests.push(Object.fromEntries(url.searchParams));
+        await delay(120);
+        if (failHistory) { await route.fulfill({ json: { code: -500, data: null } }); return; }
+        const max = url.searchParams.get('max');
+        data = !max || max === '0'
+          ? { cursor: { max: 4, view_at: historyTime - 3, business: 'archive' }, list: [90, -1, 0, undefined].map((progress, index) => historyItem(index, progress)) }
+          : max === '4'
+            ? { cursor: { max: 5, view_at: historyTime - 4, business: 'archive' }, list: [historyItem(3), historyItem(4, 120)] }
+            : { cursor: { max: 0, view_at: 0, business: '' }, list: [] };
       } else if (url.pathname.endsWith('/toview')) {
         data = { list: [{ aid: 2 }] };
       } else if (url.pathname.endsWith('/add') || url.pathname.endsWith('/del')) {
@@ -105,6 +132,34 @@ async function run(browserName, baseURL) {
     await page.waitForFunction(() => document.querySelector('.watch-later').getAttribute('aria-pressed') === 'false');
 
     const gear = page.getByRole('button', { name: '设置', exact: true });
+    const videoBadge = page.getByRole('tab', { name: /投稿/ }).locator('.label-badge');
+    const liveBadge = page.getByRole('tab', { name: /直播/ }).locator('.label-badge');
+    await liveBadge.waitFor({ state: 'visible' });
+    await gear.click();
+    await page.getByRole('switch', { name: '投稿页红点提示', exact: true }).uncheck();
+    assert.equal(await videoBadge.isVisible(), false);
+    assert.equal(await liveBadge.isVisible(), true);
+    await page.getByRole('switch', { name: '直播页红点提示', exact: true }).uncheck();
+    assert.equal(await liveBadge.isVisible(), false);
+    await page.getByRole('switch', { name: '投稿页红点提示', exact: true }).check();
+    assert.equal(await videoBadge.isVisible(), true);
+    assert.equal(await liveBadge.isVisible(), false);
+    await page.getByRole('switch', { name: '投稿页红点提示', exact: true }).uncheck();
+    const liveBadgeRequests = () => requests.filter(url => new URL(url).searchParams.get('pagesize') === '11').length;
+    const beforeDisabledReload = liveBadgeRequests();
+    await page.reload();
+    await page.locator('.card').nth(5).waitFor();
+    await delay(1300);
+    assert.equal(await videoBadge.isVisible(), false);
+    assert.equal(await liveBadge.isVisible(), false);
+    assert.equal(liveBadgeRequests(), beforeDisabledReload, 'disabled live badges do not fetch a badge count');
+    await gear.click();
+    assert.equal(await page.getByRole('switch', { name: '投稿页红点提示', exact: true }).isChecked(), false);
+    assert.equal(await page.getByRole('switch', { name: '直播页红点提示', exact: true }).isChecked(), false);
+    await page.getByRole('button', { name: '恢复默认' }).click();
+    await liveBadge.waitFor({ state: 'visible' });
+    assert.equal(await videoBadge.isVisible(), true);
+    await gear.click();
     assert.equal(await gear.getAttribute('title'), null);
     const scrollLayout = await page.evaluate(() => {
       const scroller = document.querySelector('#popup-content') || document.body;
@@ -132,11 +187,12 @@ async function run(browserName, baseURL) {
     await page.getByRole('tab', { name: /直播/ }).click();
     await page.getByText('直播示例', { exact: true }).waitFor();
     await gear.click();
-    for (const label of ['番剧', '直播', '历史']) await page.getByRole('switch', { name: label, exact: true }).uncheck();
+    for (const label of ['番剧', '直播', '历史', '热门']) await page.getByRole('switch', { name: label, exact: true }).uncheck();
     assert.equal(await page.getByRole('tab').count(), 1);
     await gear.click();
     assert.equal(await page.getByRole('tab', { name: /投稿/ }).getAttribute('aria-selected'), 'true');
     await page.keyboard.press('3');
+    await page.keyboard.press('5');
     assert.equal(await page.getByRole('tab', { name: /投稿/ }).getAttribute('aria-selected'), 'true');
     await gear.click();
     await page.evaluate(() => { window.testState.failSave = true; });
@@ -220,6 +276,44 @@ async function run(browserName, baseURL) {
     await history.getByText('已看完').waitFor();
     await history.locator('.title-link').first().click();
     assert.equal(await page.evaluate(() => window.testState.links.at(-1)), 'https://www.bilibili.com/video/BV1/?p=2');
+    // Scrolling appends history with the complete server cursor; failures keep
+    // the first page and retry the same cursor without parallel requests.
+    failHistory = true;
+    await page.locator('#popup-content').evaluate(el => {
+      el.scrollTop = el.scrollHeight;
+      for (let i = 0; i < 5; i++) el.dispatchEvent(new Event('scroll'));
+    });
+    await history.getByText('加载失败，请重试').waitFor({ timeout: 3000 });
+    assert.equal(await history.locator('.card').count(), 4);
+    assert.equal(historyRequests.filter(params => params.max === '4').length, 1);
+    assert.deepEqual(historyRequests.at(-1), { type: 'archive', ps: '20', max: '4', view_at: String(historyTime - 3), business: 'archive' });
+    failHistory = false;
+    await history.getByRole('button', { name: '重试', exact: true }).click();
+    await history.getByText('历史记录示例 5', { exact: true }).waitFor();
+    assert.equal(await history.locator('.card').count(), 5, 'overlapping history pages are deduplicated');
+    assert.deepEqual(historyRequests.at(-1), historyRequests.at(-2), 'retry preserves the cursor');
+    const beforeSettingsScroll = historyRequests.length;
+    await gear.click();
+    await page.locator('#popup-content').evaluate(el => el.scrollTo(0, el.scrollHeight));
+    await delay(180);
+    assert.equal(historyRequests.length, beforeSettingsScroll, 'settings scrolling does not load hidden history');
+    await gear.click();
+    await page.locator('#popup-content').evaluate(el => el.scrollTo(0, el.scrollHeight));
+    await history.getByText('没有更多了', { exact: true }).waitFor();
+    const completedRequests = historyRequests.length;
+    await page.locator('#popup-content').dispatchEvent('scroll');
+    await delay(180);
+    assert.equal(historyRequests.length, completedRequests, 'empty page stops pagination');
+    assert.deepEqual(await history.locator('.watch-device').evaluateAll(els => els.map(el => el.getAttribute('title'))),
+      ['电脑端观看', '手机端观看', '平板端观看', '电视端观看', '未知观看平台']);
+    const deviceLayout = await history.locator('.viewed-at').first().evaluate(el => {
+      const text = el.querySelector('.viewed-time').getBoundingClientRect();
+      const icon = el.querySelector('.watch-device').getBoundingClientRect();
+      return { fits: text.right <= icon.left, aligned: Math.abs((text.top + text.bottom) / 2 - (icon.top + icon.bottom) / 2) < 1,
+        right: Math.abs(icon.right - el.getBoundingClientRect().right) < 1 };
+    });
+    assert.deepEqual(deviceLayout, { fits: true, aligned: true, right: true });
+    await page.locator('#popup-content').evaluate(el => el.scrollTo(0, 0));
     if (process.env.SCREENSHOT_DIR && browserName === 'edge') {
       await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'history-light.png') });
       await page.emulateMedia({ colorScheme: 'dark' });
@@ -251,7 +345,7 @@ async function run(browserName, baseURL) {
         } else {
           assert.equal(await scroller.evaluate(el => getComputedStyle(el, '::-webkit-scrollbar').width), '4px');
         }
-        for (const label of ['投稿', '直播', '历史']) {
+        for (const label of ['投稿', '直播', '历史', '热门']) {
           await page.getByRole('tab', { name: new RegExp(label) }).click();
           assert.equal((await gear.boundingBox()).x, position);
           assert.equal(await scroller.evaluate(el => el.clientWidth), stableWidth);
@@ -300,8 +394,116 @@ async function run(browserName, baseURL) {
     failFeed = false;
     await page.getByRole('button', { name: '重试', exact: true }).click();
     await page.getByText('探索科学与生活：第 7 期视频更新', { exact: true }).waitFor();
+
+    // At four columns the short first page cannot fill the viewport. History
+    // must request subsequent pages without waiting for a scroll event.
+    await gear.click();
+    await page.locator('#popup-width').fill('800');
+    await page.locator('#popup-width').dispatchEvent('input');
+    await page.getByLabel('列数', { exact: true }).selectOption('4');
+    await page.setViewportSize({ width: 800, height: 600 });
+    const beforeAutoFill = historyRequests.length;
+    await page.getByRole('tab', { name: '历史', exact: true }).click();
+    await history.getByText('没有更多了', { exact: true }).waitFor();
+    assert.equal(await history.locator('.card').count(), 5);
+    assert.deepEqual(historyRequests.slice(beforeAutoFill).map(params => params.max), ['0', '4', '5']);
+    failHistory = true;
+    await page.reload();
+    await history.getByText('加载失败，请重试').waitFor();
+    assert.equal(await history.locator('.card').count(), 0);
+    failHistory = false;
+    await history.getByRole('button', { name: '重试', exact: true }).click();
+    await history.getByText('没有更多了', { exact: true }).waitFor();
+    assert.equal(await history.locator('.card').count(), 5, 'initial history failure can be retried');
+
+    // Popular uses the same grid, preserves its page on failure, and never
+    // mixes a delayed response into another selected feed.
+    await gear.click();
+    await page.getByRole('button', { name: '恢复默认' }).click();
+    await page.setViewportSize({ width: 560, height: 600 });
+    await gear.click();
+    await page.keyboard.press('5');
+    assert.equal(await page.getByRole('tab', { name: '热门', exact: true }).getAttribute('aria-selected'), 'true');
+    await page.reload();
+    await page.getByText('热门视频示例 6', { exact: true }).waitFor();
+    assert.equal(await page.locator('.stat').first().innerText(), '1.2万');
+    assert.equal(await page.locator('.duration').first().innerText(), '1:02:03');
+    assert.equal(await page.locator('.watch-later').nth(1).getAttribute('aria-pressed'), 'true');
+    await page.locator('.card').first().hover();
+    await page.locator('.watch-later').first().click();
+    await page.waitForFunction(() => document.querySelector('.watch-later').getAttribute('aria-pressed') === 'true');
+    await page.locator('.title-link').first().click();
+    assert.equal(await page.evaluate(() => window.testState.links.at(-1)), 'https://www.bilibili.com/video/BVpopular1/');
+    await delay(350); // Let Element UI's tab underline reach the selected tab.
+    if (process.env.SCREENSHOT_DIR && browserName === 'edge') {
+      await page.emulateMedia({ colorScheme: 'light' });
+      await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'popular-light.png') });
+      await page.emulateMedia({ colorScheme: 'dark' });
+      await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'popular-dark.png') });
+    }
+    await gear.click();
+    await page.locator('#popup-width').fill('380');
+    await page.locator('#popup-width').dispatchEvent('input');
+    await page.setViewportSize({ width: 380, height: 600 });
+    await page.locator('#popup-content').evaluate(el => el.scrollTo(0, 0));
+    if (process.env.SCREENSHOT_DIR && browserName === 'edge') {
+      await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'settings-badges-380.png') });
+    }
+    await gear.click();
+    await delay(350);
+    const headerFits = await page.locator('.toolbar').evaluate(el => {
+      const tabs = [...el.querySelectorAll('[role=tab]')].map(tab => tab.getBoundingClientRect());
+      const gear = el.querySelector('.settings-button').getBoundingClientRect();
+      return tabs.every((tab, i) => tab.left >= 0 && tab.right <= gear.left && (!i || tab.left >= tabs[i - 1].right));
+    });
+    assert.equal(headerFits, true, 'all five tabs fit beside settings at 380px');
+    if (process.env.SCREENSHOT_DIR && browserName === 'edge') {
+      await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'popular-380.png') });
+    }
+    await gear.click();
+    await page.locator('#popup-width').fill('560');
+    await page.locator('#popup-width').dispatchEvent('input');
+    await page.setViewportSize({ width: 560, height: 600 });
+    await gear.click();
+    failPopular = true;
+    await page.locator('#popup-content').evaluate(el => el.scrollTo(0, el.scrollHeight));
+    await page.getByText('加载失败，请重试').waitFor();
+    assert.equal(await page.locator('.card').count(), 6);
+    failPopular = false;
+    await page.getByRole('button', { name: '重试', exact: true }).click();
+    await page.getByText('热门视频示例 7', { exact: true }).waitFor();
+    assert.equal(await page.locator('.card').count(), 7);
+    assert.deepEqual(popularRequests.slice(-3), ['1', '2', '2']);
+    await page.getByRole('button', { name: '更多热门视频', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.testState.links.at(-1)), 'https://www.bilibili.com/v/popular/all');
+    delayPopular = true;
+    await page.reload();
+    await page.getByRole('tab', { name: /番剧/ }).click();
+    await page.getByText('番剧示例', { exact: true }).waitFor();
+    await delay(250);
+    assert.equal(await page.locator('.card').count(), 1);
+    await page.keyboard.press('5');
+    await page.getByText('热门视频示例 6', { exact: true }).waitFor();
+    delayPopular = false;
+    emptyPopular = true;
+    await page.reload();
+    await page.getByText('暂无热门视频', { exact: true }).waitFor();
+    assert.equal(await page.locator('.card').count(), 0);
+    emptyPopular = false;
+    failPopular = true;
+    await page.reload();
+    await page.getByText('加载失败，请重试').waitFor();
+    failPopular = false;
+    await page.getByRole('button', { name: '重试', exact: true }).click();
+    await page.getByText('热门视频示例 6', { exact: true }).waitFor();
+    // Hiding the selected popular tab falls back to 投稿 and survives reopening.
+    await gear.click();
+    await page.getByRole('switch', { name: '热门', exact: true }).uncheck();
+    await page.reload();
+    assert.equal(await page.getByRole('tab', { name: '热门', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('tab', { name: /投稿/ }).getAttribute('aria-selected'), 'true');
     assert.deepEqual(errors, []);
-    console.log(`${browserName}: settings, persistence, tab shortcuts, watch-later success/failure, responsive layout, themes, pagination, request race and retry passed`);
+    console.log(`${browserName}: settings, independent badges, persistence, tab shortcuts, watch-later, responsive layout, themes, pagination, history, popular retry/empty/race and links passed`);
     await context.close();
   } finally { await browser.close(); }
 }

@@ -10,6 +10,19 @@
       </label>
     </fieldset>
     <fieldset>
+      <legend>红点提示</legend>
+      <label class="setting-row">
+        <span>投稿页红点提示</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.showVideoBadge"
+          @change="change('showVideoBadge', $event.target.checked)" />
+      </label>
+      <label class="setting-row">
+        <span>直播页红点提示</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.showLiveBadge"
+          @change="change('showLiveBadge', $event.target.checked)" />
+      </label>
+    </fieldset>
+    <fieldset>
       <legend>视频卡片</legend>
       <label class="setting-row">
         <span>隐藏充电专属视频</span>
@@ -62,6 +75,7 @@ export default {
     { key: 'showBangumi', label: '番剧' },
     { key: 'showLive', label: '直播' },
     { key: 'showHistory', label: '历史' },
+    { key: 'showPopular', label: '热门' },
   ] }; },
   watch: {
     'settings.popupWidth'(value) { this.widthDraft = String(value); },
