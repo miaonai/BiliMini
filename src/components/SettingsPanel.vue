@@ -47,6 +47,48 @@
         <input type="checkbox" role="switch" class="capsule" :checked="settings.showWatchLater"
           @change="change('showWatchLater', $event.target.checked)" />
       </label>
+      <label class="setting-row">
+        <span>悬浮卡片时使用发光边框</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.cardHoverGlow"
+          @change="change('cardHoverGlow', $event.target.checked)" />
+      </label>
+      <label class="setting-row">
+        <span>悬浮卡片时放大封面</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.cardHoverZoom"
+          @change="change('cardHoverZoom', $event.target.checked)" />
+      </label>
+    </fieldset>
+    <fieldset>
+      <legend>悬浮预览</legend>
+      <label class="setting-row">
+        <span>开启悬浮预览</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.hoverPreview"
+          @change="change('hoverPreview', $event.target.checked)" />
+      </label>
+      <label class="setting-row" :class="{ disabled: !settings.hoverPreview }">
+        <span>延迟悬浮预览</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.previewDelay" :disabled="!settings.hoverPreview"
+          @change="change('previewDelay', $event.target.checked)" />
+      </label>
+      <div class="setting-row" :class="{ disabled: !settings.hoverPreview || !settings.previewDelay }">
+        <label for="preview-delay">预览延迟时间</label>
+        <span class="number-value"><input id="preview-delay" type="number" min="0" max="5000" step="50"
+          :disabled="!settings.hoverPreview || !settings.previewDelay" v-model="previewDelayDraft"
+          @change="commitPreviewDelay" @keydown.enter.prevent="$event.target.blur()"
+          @keydown.esc.prevent="cancelPreviewDelay" /> ms</span>
+      </div>
+      <label class="setting-row" :class="{ disabled: !settings.hoverPreview }">
+        <span>自动预览</span>
+        <input type="checkbox" role="switch" class="capsule" :checked="settings.previewAuto" :disabled="!settings.hoverPreview"
+          @change="change('previewAuto', $event.target.checked)" />
+      </label>
+      <div class="setting-row" :class="{ disabled: !settings.hoverPreview || !settings.previewAuto }">
+        <label for="preview-interval">自动预览更新间隔</label>
+        <span class="number-value"><input id="preview-interval" type="number" min="100" max="2000" step="50"
+          :disabled="!settings.hoverPreview || !settings.previewAuto" v-model="previewIntervalDraft"
+          @change="commitPreviewInterval" @keydown.enter.prevent="$event.target.blur()"
+          @keydown.esc.prevent="cancelPreviewInterval" /> ms</span>
+      </div>
     </fieldset>
     <fieldset>
       <legend>布局</legend>
@@ -57,7 +99,7 @@
       </label>
       <div class="size-row">
         <label for="popup-width-value">宽度</label>
-        <span class="width-value"><input id="popup-width-value" type="number" min="380" max="800" step="1"
+        <span class="number-value"><input id="popup-width-value" type="number" min="380" max="800" step="1"
           v-model="widthDraft" @change="commitWidth" @keydown.enter.prevent="$event.target.blur()"
           @keydown.esc.prevent="cancelWidth" /> px</span>
       </div>
@@ -86,15 +128,39 @@ import { orderedTabs } from '@/utils/settings';
 export default {
   name: 'SettingsPanel',
   props: ['settings', 'saveError'],
-  data() { return { widthDraft: String(this.settings.popupWidth), draggedTab: '', dropTarget: '', dropAfter: false, orderAnnouncement: '' }; },
+  data() { return { widthDraft: String(this.settings.popupWidth), previewDelayDraft: String(this.settings.previewDelayMs), previewIntervalDraft: String(this.settings.previewInterval), draggedTab: '', dropTarget: '', dropAfter: false, orderAnnouncement: '' }; },
   computed: {
     tabOptions() { return orderedTabs(this.settings); },
   },
   watch: {
     'settings.popupWidth'(value) { this.widthDraft = String(value); },
+    'settings.previewDelayMs'(value) { this.previewDelayDraft = String(value); },
+    'settings.previewInterval'(value) { this.previewIntervalDraft = String(value); },
   },
   methods: {
     change(key, value) { this.$emit('change', { ...this.settings, [key]: value }); },
+    commitPreviewDelay() {
+      const value = Number(this.previewDelayDraft);
+      if (String(this.previewDelayDraft).trim() !== '' && Number.isFinite(value)) {
+        this.change('previewDelayMs', Math.max(0, Math.min(5000, Math.round(value))));
+      }
+      this.previewDelayDraft = String(this.settings.previewDelayMs);
+    },
+    cancelPreviewDelay(event) {
+      this.previewDelayDraft = String(this.settings.previewDelayMs);
+      event.target.blur();
+    },
+    commitPreviewInterval() {
+      const value = Number(this.previewIntervalDraft);
+      if (String(this.previewIntervalDraft).trim() !== '' && Number.isFinite(value)) {
+        this.change('previewInterval', Math.max(100, Math.min(2000, Math.round(value))));
+      }
+      this.previewIntervalDraft = String(this.settings.previewInterval);
+    },
+    cancelPreviewInterval(event) {
+      this.previewIntervalDraft = String(this.settings.previewInterval);
+      event.target.blur();
+    },
     startDrag(event, id) {
       this.draggedTab = id;
       event.dataTransfer.effectAllowed = 'move';
@@ -158,6 +224,7 @@ h2 { margin: 0 0 12px; font-size: 20px; }
 fieldset { border: 0; padding: 0 0 8px; margin: 0 0 10px; border-bottom: 1px solid var(--border); }
 legend { padding: 0; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
 .setting-row { display: flex; align-items: center; justify-content: space-between; min-height: 40px; gap: 16px; cursor: pointer; }
+.setting-row.disabled { color: var(--muted); cursor: default; }
 .tab-row { position: relative; gap: 4px; cursor: default; }
 .tab-row.dragging { opacity: .5; }
 .tab-row.drop-before::before, .tab-row.drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; background: var(--accent); pointer-events: none; }
@@ -175,11 +242,13 @@ label.tab-label { cursor: pointer; }
 .capsule::before { content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: white; }
 .capsule:checked { background: var(--accent); }
 .capsule:checked::before { transform: translateX(16px); }
+.capsule:disabled { opacity: .45; cursor: default; }
 .size-row { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
-.width-value { color: var(--muted); font-variant-numeric: tabular-nums; }
-.width-value input { width: 66px; padding: 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); text-align: right; appearance: textfield; }
-.width-value input::-webkit-inner-spin-button, .width-value input::-webkit-outer-spin-button { appearance: none; margin: 0; }
-.width-value input:hover, .width-value input:focus { border-color: var(--border); background: var(--surface); }
+.number-value { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.number-value input { width: 66px; padding: 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); text-align: right; appearance: textfield; }
+.number-value input::-webkit-inner-spin-button, .number-value input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.number-value input:not(:disabled):hover, .number-value input:focus { border-color: var(--border); background: var(--surface); }
+.number-value input:disabled { color: var(--muted); opacity: .6; }
 select { min-height: 36px; padding: 4px 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 5px; font: inherit; }
 input[type=range] { width: 100%; margin: 6px 0 0; min-height: 28px; accent-color: var(--accent); cursor: pointer; }
 footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }

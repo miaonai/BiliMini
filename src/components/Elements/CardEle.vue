@@ -1,8 +1,14 @@
 <template>
-  <article class="card">
+  <article class="card" :class="{ 'hover-glow': hoverGlow, 'hover-zoom': hoverZoom, previewing: isPreviewing }"
+    @mouseenter="movePreview" @mousemove="movePreview" @mouseleave="previewHovered = false">
     <div class="cover-wrap">
       <a class="video-img" :href="cardObj.media_link" :aria-label="cardObj.media_title" @click.prevent="handleLink(cardObj.media_link)">
-        <img class="cover" :src="cardObj.media_cover" alt="" />
+        <div class="cover-frame">
+          <img class="cover" :src="cardObj.media_cover" alt="" />
+          <cover-preview v-if="previewEnabled && previewSettings && previewSettings.hoverPreview && cardObj.preview"
+            :target="cardObj.preview" :settings="previewSettings" :active="previewHovered" :position="previewPosition" :zoom="hoverZoom"
+            @visibility-change="previewVisible = $event" />
+        </div>
         <div v-if="cardObj.type_ !== 'live'" class="video-stats">
           <span v-if="cardObj.watch_progress" class="watched-text">{{ cardObj.watch_progress.text }}</span>
           <div v-else class="counts">
@@ -79,11 +85,25 @@
 
 <script>
 import { addToWatchData, delTowatchData } from '@/utils/api';
+import CoverPreview from './CoverPreview.vue';
 export default {
   name: 'CardEle',
-  props: ['cardObj', 'extraAuthors', 'showWatchLater'],
-  data() { return { addedToWatch: Boolean(this.cardObj.toWatch), watchPending: false, watchError: '' }; },
+  components: { CoverPreview },
+  props: ['cardObj', 'extraAuthors', 'showWatchLater', 'hoverGlow', 'hoverZoom', 'previewSettings', 'previewEnabled'],
+  data() { return { addedToWatch: Boolean(this.cardObj.toWatch), watchPending: false, watchError: '', previewHovered: false, previewPosition: 0, previewVisible: false }; },
+  computed: {
+    isPreviewing() { return this.previewVisible && this.previewHovered && this.previewEnabled && this.previewSettings?.hoverPreview; },
+  },
+  watch: {
+    previewEnabled(value) { if (!value) this.previewHovered = false; },
+  },
   methods: {
+    movePreview(event) {
+      if (!this.previewEnabled || !this.previewSettings?.hoverPreview || !this.cardObj.preview) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      this.previewPosition = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      this.previewHovered = true;
+    },
     handleLink(link) {
       if (!link) return;
       if (link.startsWith('//')) link = 'https:' + link;
@@ -115,9 +135,17 @@ export default {
 
 <style scoped>
 .card { container-type: inline-size; min-width: 0; border-radius: 8px; background: var(--surface); box-shadow: 0 2px 6px #0000000d; }
+.card.hover-glow { transition: box-shadow 150ms ease-out; }
+/* Hover effects reference: https://github.com/magicdawn/Bilibili-Gate/blob/7edc62a55b19032f5225e89a3955d487ec31df33/src/components/VideoCard/card-border-css.tsx */
+.card.hover-glow:hover, .card.hover-glow:focus-within { box-shadow: 0 0 0 1px var(--accent), 0 0 9px 4px color-mix(in srgb, var(--accent) 80%, white); }
 .cover-wrap { position: relative; }
 .video-img { position: relative; display: block; border-radius: 8px 8px 0 0; overflow: hidden; }
+.cover-frame { position: relative; overflow: hidden; }
 .cover { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.card.hover-zoom .cover { transform-origin: center; transition: transform 200ms ease-out; }
+@media (prefers-reduced-motion: no-preference) {
+  .card.hover-zoom:hover .cover, .card.hover-zoom:focus-within .cover { transform: scale(1.05); }
+}
 .video-stats { position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 18px 7px 6px; background: linear-gradient(transparent, #000b); color: #fff; font-size: clamp(10px, calc(var(--card-font-size) - 2px), 13px); font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; pointer-events: none; }
 .counts { display: flex; gap: 8px; min-width: 0; }
 .stat { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
@@ -134,6 +162,7 @@ export default {
 .watch-later { position: absolute; left: 4px; top: 4px; width: 40px; height: 40px; display: grid; place-items: center; padding: 8px; border: 0; border-radius: 6px; background: #000b; color: #fff; cursor: pointer; opacity: 0; }
 .watch-later svg { width: 24px; height: 24px; }
 .card:hover .watch-later, .card:focus-within .watch-later, .card:hover .show-text, .card:focus-within .show-text { opacity: 1; }
+.card.previewing .video-stats, .card.previewing .show-text, .card.previewing .watch-progress { visibility: hidden; }
 .watch-later.added { color: #9bd1ff; }
 .watch-later:disabled { cursor: wait; }
 .container { padding: 8px 10px 10px; }

@@ -49,6 +49,7 @@ export function appendDynamicPage(state, data, toWatchAids = []) {
       index: item.id_str,
       type_: video ? 'video' : 'pgc',
       aid: video ? info.aid : info.epid,
+      preview: video ? { aid: info.aid, bvid: info.bvid, cid: info.cid, duration: info.duration_text } : { epid: info.epid },
       media_link: info.jump_url,
       media_title: info.title,
       media_cover: info.cover,

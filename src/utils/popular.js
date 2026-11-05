@@ -11,6 +11,7 @@ export function appendPopularPage(state, data, toWatchAids = []) {
     if (seen.has(index)) continue;
     state.cards.push({
       index, type_: 'video', aid: item.aid,
+      preview: { aid: item.aid, bvid: item.bvid, cid: item.cid, duration: item.duration },
       media_link: `https://www.bilibili.com/video/${item.bvid || `av${item.aid}`}/`,
       media_title: item.title,
       media_cover: item.pic?.replace(/^http:/, 'https:'),

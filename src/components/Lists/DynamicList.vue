@@ -2,7 +2,8 @@
   <section class="main" :aria-busy="String(current.loading)">
     <div class="card-grid">
       <card-ele v-for="card in cards" :key="card.index" :card-obj="card"
-        :show-watch-later="settings.showWatchLater" :extra-authors="current.extraAuthors[card.dynamicId]" />
+        :show-watch-later="settings.showWatchLater" :hover-glow="settings.cardHoverGlow" :hover-zoom="settings.cardHoverZoom"
+        :extra-authors="current.extraAuthors[card.dynamicId]" :preview-settings="settings" :preview-enabled="enabled" />
     </div>
     <p v-if="current.loading" class="list-status" role="status">正在加载…</p>
     <p v-else-if="current.error" class="list-status error" role="alert">{{ current.error }}</p>

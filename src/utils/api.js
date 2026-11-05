@@ -1,10 +1,10 @@
 import axios from "axios";
 
 
-const handleRequest = async function (url, method = 'get', data = false) {
+const handleRequest = async function (url, method = 'get', data = false, options = {}) {
     if (method === 'get') {
         try {
-            const response = await axios.get(url);
+            const response = await axios.get(url, options);
             return response.data;
         }
         catch (e) {
@@ -13,7 +13,7 @@ const handleRequest = async function (url, method = 'get', data = false) {
         }
     } else if (method === 'post') {
         try {
-            const response = await axios.post(url, data);
+            const response = await axios.post(url, data, options);
             return response.data;
         }
         catch (e) {
@@ -84,6 +84,36 @@ const getHistoryData = async function (cursor = null) {
     return responseData;
 }
 
+// Snapshot previews use the public videoshot endpoint, also used by Bilibili-Gate.
+const getVideoPreviewData = async function (target) {
+    const request = url => handleRequest(url, 'get', false, { timeout: 8000 });
+    let archive = { ...target };
+    if (archive.epid) {
+        const season = await request(`https://api.bilibili.com/pgc/view/web/season?ep_id=${archive.epid}`);
+        const episode = season?.result?.episodes?.find(item => String(item.id) === archive.epid);
+        if (!episode || (!episode.aid && !episode.bvid)) return false;
+        archive = { aid: episode.aid, bvid: episode.bvid, cid: episode.cid, duration: episode.duration / 1000 };
+    }
+    if (!archive.cid) {
+        const identity = new URLSearchParams(archive.aid ? { aid: archive.aid } : { bvid: archive.bvid });
+        const view = await request(`https://api.bilibili.com/x/web-interface/view?${identity}`);
+        const part = view?.data?.pages?.find(item => item.page === (archive.page || 1));
+        if (view?.code === 0 && part?.cid) {
+            archive.cid = part.cid;
+            archive.duration = part.duration;
+        } else {
+            if (archive.page > 1) return false;
+            // The feed's total duration can span multiple parts. Without part
+            // metadata, use the snapshot timeline instead of that total.
+            archive.duration = undefined;
+        }
+    }
+    const params = new URLSearchParams({ index: '1', ...(archive.aid ? { aid: archive.aid } : { bvid: archive.bvid }) });
+    if (archive.cid) params.set('cid', archive.cid);
+    const response = await request(`https://api.bilibili.com/x/player/videoshot?${params}`);
+    return response && { ...response, duration: archive.duration };
+}
+
 export {
     getDynamicData,
     getPopularData,
@@ -92,4 +122,5 @@ export {
     delTowatchData,
     getLiveData,
     getHistoryData,
+    getVideoPreviewData,
 }

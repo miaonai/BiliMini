@@ -1,7 +1,8 @@
 <template>
   <section class="history-list" :aria-busy="String(state.loading)">
     <div class="card-grid">
-      <card-ele v-for="card in state.cards" :key="card.index" :card-obj="card" />
+      <card-ele v-for="card in state.cards" :key="card.index" :card-obj="card" :hover-glow="hoverGlow" :hover-zoom="hoverZoom"
+        :preview-settings="previewSettings" :preview-enabled="enabled" />
     </div>
     <p v-if="state.loading" class="list-status" role="status">正在加载…</p>
     <p v-else-if="state.error" class="list-status error" role="alert">{{ state.error }}</p>
@@ -22,7 +23,12 @@ import { createHistoryState, appendHistoryPage } from '@/utils/history';
 export default {
   name: 'HistoryList',
   components: { CardEle },
-  props: { enabled: { type: Boolean, default: true } },
+  props: {
+    enabled: { type: Boolean, default: true },
+    hoverGlow: { type: Boolean, default: false },
+    hoverZoom: { type: Boolean, default: false },
+    previewSettings: Object,
+  },
   data: () => ({ state: createHistoryState(), autoPages: 0 }),
   mounted() {
     this.scroller = document.getElementById('popup-content');

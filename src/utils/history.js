@@ -71,6 +71,10 @@ export function historyCard(item, viewedAt) {
   return {
     index: `${history.business || 'archive'}-${item.kid || history.bvid || history.oid}-${item.view_at}`,
     type_: 'history',
+    preview: history.business === 'archive'
+      ? { aid: history.oid, bvid: history.bvid, cid: history.cid, page: history.page, duration: item.duration }
+      : history.business === 'pgc' && /\/ep(\d+)/.test(link.pathname)
+        ? { epid: link.pathname.match(/\/ep(\d+)/)[1], duration: item.duration } : null,
     media_link: link.href,
     media_title: item.title,
     media_cover: item.cover,

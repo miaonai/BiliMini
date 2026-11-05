@@ -22,7 +22,8 @@
       <p v-else-if="activeTab !== '5' && loggedInStatus === -101" role="alert" class="notice">尚未登录 Bilibili，<a href="https://passport.bilibili.com/login" @click.prevent="openLogin">登录</a>后再试。</p>
       <p v-else-if="activeTab !== '5' && loggedInStatus !== 0" role="alert" class="notice">暂时无法获取登录状态，请稍后重试。</p>
       <dynamic-list v-show="activeTab !== '4'" :active-tab="activeTab" :settings="settings" :enabled="!settingsOpen && activeTab !== '4'" />
-      <history-list v-if="settings.showHistory && activeTab === '4'" :enabled="!settingsOpen" />
+      <history-list v-if="settings.showHistory && activeTab === '4'" :enabled="!settingsOpen"
+        :hover-glow="settings.cardHoverGlow" :hover-zoom="settings.cardHoverZoom" :preview-settings="settings" />
     </div>
     </main>
   </div>

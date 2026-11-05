@@ -18,6 +18,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showLiveBadge: true,
   hideChargeOnly: false,
   showWatchLater: true,
+  cardHoverGlow: true,
+  cardHoverZoom: true,
+  hoverPreview: false,
+  previewDelay: true,
+  previewDelayMs: 800,
+  previewAuto: true,
+  previewInterval: 700,
   hideScrollbar: false,
   popupWidth: 560,
   columns: 'auto',
@@ -31,7 +38,7 @@ export function normalizeSettings(value) {
       settings[key] = source[key];
     }
   }
-  for (const [key, min, max] of [['popupWidth', 380, 800]]) {
+  for (const [key, min, max] of [['popupWidth', 380, 800], ['previewDelayMs', 0, 5000], ['previewInterval', 100, 2000]]) {
     if (typeof source[key] === 'number' && Number.isFinite(source[key])) {
       settings[key] = Math.max(min, Math.min(max, Math.round(source[key])));
     }

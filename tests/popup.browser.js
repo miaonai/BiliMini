@@ -25,6 +25,13 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function waitUntil(condition) {
+  const deadline = Date.now() + 3000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for a preview request');
+    await delay(10);
+  }
+}
 
 async function run(browserName, baseURL) {
   const launch = { headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] };
@@ -59,6 +66,23 @@ async function run(browserName, baseURL) {
     let failPopular = false;
     let delayPopular = false;
     let emptyPopular = false;
+    let previewResponseDelay = 0;
+    let delaySecondSheet = false;
+    let failPreview = false;
+    let failPreviewImages = false;
+    const previewRequests = [];
+    const previewImages = [];
+    const previewSheet = label => `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">${Array.from({ length: 16 }, (_, i) => {
+      const x = i % 4 * 160;
+      const y = Math.floor(i / 4) * 90;
+      return `<rect x="${x}" y="${y}" width="160" height="90" fill="${['#185b8c', '#6350a0', '#a04252', '#30735c'][i % 4]}"/><text x="${x + 10}" y="${y + 50}" fill="white" font-family="sans-serif" font-size="17">${label} ${i}</text>`;
+    }).join('')}</svg>`;
+    await context.route('https://i0.hdslb.com/bilimini-preview/**', async route => {
+      previewImages.push(route.request().url());
+      if (failPreviewImages) { await route.abort(); return; }
+      if (delaySecondSheet && route.request().url().endsWith('-1.svg')) await delay(500);
+      await route.fulfill({ contentType: 'image/svg+xml', body: previewSheet(path.basename(new URL(route.request().url()).pathname)) });
+    });
     const popularRequests = [];
     const popularItem = aid => ({ aid, bvid: `BVpopular${aid}`, title: `热门视频示例 ${aid}`,
       pic: artwork(`POPULAR ${aid}`), owner: { mid: 1, name: '热门 UP 主', face: artwork('UP') },
@@ -66,14 +90,28 @@ async function run(browserName, baseURL) {
     const historyRequests = [];
     const historyTime = Math.floor(Date.now() / 1000);
     const historyItem = (index, progress) => ({ kid: index + 1, cover: artwork('历史'), uri: '',
-      history: { bvid: `BV${index + 1}`, business: 'archive', page: index === 0 ? 2 : 1, dt: [2, 3, 6, 33, 99][index] },
+      history: { bvid: `BV${index + 1}`, oid: 100 + index, cid: index ? 7000 + index : undefined,
+        business: 'archive', page: index === 0 ? 2 : 1, dt: [2, 3, 6, 33, 99][index] },
       progress, duration: 360, title: `历史记录示例 ${index + 1}`, author_mid: 1,
       author_face: artwork('UP'), author_name: '示例 UP 主', view_at: historyTime - index });
     await context.route('https://**.bilibili.com/**', async route => {
       const url = new URL(route.request().url());
       requests.push(url.href);
       let data;
-      if (url.pathname.endsWith('/feed/all')) {
+      if (url.pathname.endsWith('/videoshot')) {
+        previewRequests.push(Object.fromEntries(url.searchParams));
+        if (previewResponseDelay) await delay(previewResponseDelay);
+        if (failPreview) { await route.fulfill({ json: { code: -500 } }); return; }
+        const aid = url.searchParams.get('aid');
+        const duration = url.searchParams.get('cid') === '300' ? 600 : url.searchParams.get('cid') === '9002' ? 360 : 300;
+        data = { img_x_len: 4, img_y_len: 4, img_x_size: 160, img_y_size: 90,
+          image: [0, 1].map(index => `https://i0.hdslb.com/bilimini-preview/${aid}-${index}.svg`),
+          index: Array.from({ length: 31 }, (_, index) => index * duration / 30) };
+      } else if (url.pathname.endsWith('/season')) {
+        await route.fulfill({ json: { code: 0, result: { episodes: [{ id: 1, aid: 200, cid: 300, duration: 600000 }] } } }); return;
+      } else if (url.pathname.endsWith('/view')) {
+        data = { pages: [{ page: 1, cid: 9001, duration: 300 }, { page: 2, cid: 9002, duration: 360 }] };
+      } else if (url.pathname.endsWith('/feed/all')) {
         if (delayVideo && url.searchParams.get('type') === 'video') await delay(180);
         if (failFeed) { await route.fulfill({ json: { code: -500, data: null } }); return; }
         if (url.searchParams.get('type') === 'pgc') {
@@ -587,8 +625,164 @@ async function run(browserName, baseURL) {
     assert.deepEqual(await tabOrder(), ['1', '2', '3', '4', '5']);
     await page.reload();
     assert.deepEqual(await tabOrder(), ['1', '2', '3', '4', '5']);
+
+    // Preview is opt-in. Its delay gates network work, and its timers/late
+    // responses must never survive leaving a card or opening settings.
+    assert.equal(previewRequests.length, 0);
+    await page.getByRole('tab', { name: /投稿/ }).click();
+    const previewCards = page.locator('.main .card');
+    await previewCards.nth(5).waitFor();
+    const firstPreview = previewCards.first();
+    await firstPreview.hover();
+    await delay(850);
+    assert.equal(previewRequests.length, 0, 'default-off previews do not fetch anything');
+    await gear.click();
+    const previewSwitch = page.getByRole('switch', { name: '开启悬浮预览', exact: true });
+    const previewDelaySwitch = page.getByRole('switch', { name: '延迟悬浮预览', exact: true });
+    const previewAutoSwitch = page.getByRole('switch', { name: '自动预览', exact: true });
+    const previewInterval = page.getByRole('spinbutton', { name: '自动预览更新间隔', exact: true });
+    assert.equal(await previewSwitch.isChecked(), false);
+    assert.equal(await previewDelaySwitch.isDisabled(), true);
+    assert.equal(await previewAutoSwitch.isDisabled(), true);
+    assert.equal(await previewInterval.isDisabled(), true);
+    assert.equal(await previewInterval.inputValue(), '700');
+    await previewSwitch.check();
+    await gear.click();
+    await firstPreview.hover();
+    await delay(200);
+    await page.mouse.move(0, 0);
+    await delay(850);
+    assert.equal(previewRequests.length, 0, 'passing over a card cancels its delayed request');
+    const beforePreview = await firstPreview.boundingBox();
+    await firstPreview.hover();
+    await delay(200);
+    assert.equal(await firstPreview.locator('.preview').count(), 0);
+    await firstPreview.locator('.preview').waitFor();
+    assert.deepEqual(await firstPreview.boundingBox(), beforePreview);
+    assert.equal(previewRequests.length, 1);
+    const progressWidth = await firstPreview.locator('.preview-progress span').evaluate(el => el.style.width);
+    await page.waitForFunction(before => {
+      const bar = document.querySelector('.preview-progress span');
+      return bar && bar.style.width !== before;
+    }, progressWidth);
+    await page.mouse.move(0, 0);
+    assert.equal(await page.locator('.preview').count(), 0);
+    await firstPreview.hover();
+    await firstPreview.locator('.preview').waitFor();
+    assert.equal(previewRequests.length, 1, 'reentering a card reuses cached metadata');
+    if (process.env.PREVIEW_SCREENSHOT_DIR && browserName === 'edge') {
+      fs.mkdirSync(process.env.PREVIEW_SCREENSHOT_DIR, { recursive: true });
+      await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, 'hover-preview-dark.png') });
+    }
+    await gear.click();
+    assert.equal(await page.locator('.preview').count(), 0, 'opening settings stops previews');
+    await previewInterval.fill('450');
+    await previewInterval.press('Enter');
+    await previewInterval.fill('');
+    await previewInterval.press('Enter');
+    assert.equal(await previewInterval.inputValue(), '450');
+    await previewDelaySwitch.uncheck();
+    await previewAutoSwitch.uncheck();
+    assert.equal(await previewInterval.isDisabled(), true);
+    await page.reload();
+    await previewCards.nth(5).waitFor();
+    await gear.click();
+    assert.equal(await previewSwitch.isChecked(), true);
+    assert.equal(await previewDelaySwitch.isChecked(), false);
+    assert.equal(await previewAutoSwitch.isChecked(), false);
+    assert.equal(await previewInterval.inputValue(), '450');
+    if (process.env.PREVIEW_SCREENSHOT_DIR && browserName === 'edge') {
+      await previewSwitch.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: path.join(process.env.PREVIEW_SCREENSHOT_DIR, 'hover-preview-settings.png') });
+    }
+    await gear.click();
+    const previewBox = await firstPreview.boundingBox();
+    const moveProgress = async fraction => {
+      await page.mouse.move(previewBox.x + previewBox.width * fraction, previewBox.y + 80);
+    };
+    await moveProgress(0.1);
+    await firstPreview.locator('.preview').waitFor();
+    const manualWidth = await firstPreview.locator('.preview-progress span').evaluate(el => el.style.width);
+    const manualTime = await firstPreview.locator('.preview-time').innerText();
+    const manualSeconds = manualTime.split(':').reduce((total, part) => total * 60 + Number(part), 0);
+    assert.ok(Math.abs(manualSeconds - 30) <= 1, 'preview time uses the first part, rather than the aggregate feed duration');
+    await delay(650);
+    assert.equal(await firstPreview.locator('.preview-progress span').evaluate(el => el.style.width), manualWidth, 'manual previews do not advance on a timer');
+    delaySecondSheet = true;
+    await moveProgress(0.9);
+    await waitUntil(() => previewImages.some(url => url.endsWith('/1-1.svg')));
+    await moveProgress(0.1);
+    await delay(600);
+    assert.ok((await firstPreview.locator('.preview-image').evaluate(el => el.style.backgroundImage)).includes('/1-0.svg'), 'a late sheet cannot replace the frame at the current mouse position');
+    delaySecondSheet = false;
+    await moveProgress(0.9);
+    await page.waitForFunction(() => document.querySelector('.preview-image')?.style.backgroundImage.includes('/1-1.svg'));
+    await page.getByRole('tab', { name: '历史', exact: true }).click();
+    const historyPreview = page.locator('.history-list .card').first();
+    await historyPreview.waitFor();
+    await historyPreview.hover();
+    await historyPreview.locator('.preview').waitFor();
+    assert.equal(previewRequests.at(-1).aid, '100');
+    assert.equal(previewRequests.at(-1).cid, '9002', 'history previews use the recorded part rather than the first part');
+    await page.getByRole('tab', { name: /番剧/ }).click();
+    await previewCards.first().waitFor();
+    await previewCards.first().hover();
+    await previewCards.first().locator('.preview').waitFor();
+    assert.equal(previewRequests.at(-1).aid, '200', 'episode IDs are resolved to archive IDs');
+    assert.equal(previewRequests.at(-1).cid, '300');
+    const beforeLivePreview = previewRequests.length;
+    await page.getByRole('tab', { name: /直播/ }).click();
+    await previewCards.first().hover();
+    await delay(200);
+    assert.equal(previewRequests.length, beforeLivePreview);
+    assert.equal(await page.locator('.preview').count(), 0);
+    await page.getByRole('tab', { name: '热门', exact: true }).click();
+    await previewCards.first().hover();
+    await previewCards.first().locator('.preview').waitFor();
+    await page.getByRole('tab', { name: /投稿/ }).click();
+    previewResponseDelay = 400;
+    await previewCards.nth(2).hover();
+    await waitUntil(() => previewRequests.some(request => request.aid === '3'));
+    await previewCards.nth(3).hover();
+    await previewCards.nth(3).locator('.preview').waitFor();
+    assert.equal(await previewCards.nth(2).locator('.preview').count(), 0);
+    assert.equal(await page.locator('.preview').count(), 1, 'late responses cannot revive an inactive card');
+    previewResponseDelay = 0;
+    failPreview = true;
+    await previewCards.nth(4).hover();
+    await waitUntil(() => previewRequests.some(request => request.aid === '5'));
+    await delay(200);
+    assert.equal(await previewCards.nth(4).locator('.preview').count(), 0);
+    assert.equal(await previewCards.nth(4).locator('.cover').isVisible(), true);
+    failPreview = false;
+    await page.mouse.move(0, 0);
+    await previewCards.nth(4).hover();
+    await previewCards.nth(4).locator('.preview').waitFor();
+    failPreviewImages = true;
+    await previewCards.nth(5).hover();
+    await waitUntil(() => previewImages.some(url => url.includes('/6-')));
+    await delay(200);
+    assert.equal(await previewCards.nth(5).locator('.preview').count(), 0);
+    failPreviewImages = false;
+    await page.mouse.move(0, 0);
+    await previewCards.nth(5).hover();
+    await previewCards.nth(5).locator('.preview').waitFor();
+    await gear.click();
+    await previewSwitch.uncheck();
+    const disabledPreviewRequests = previewRequests.length;
+    await gear.click();
+    await firstPreview.hover();
+    await delay(850);
+    assert.equal(previewRequests.length, disabledPreviewRequests);
+    assert.equal(await page.locator('.preview').count(), 0);
+    await gear.click();
+    await page.getByRole('button', { name: '恢复默认' }).click();
+    assert.equal(await previewSwitch.isChecked(), false);
+    assert.equal(await previewDelaySwitch.isChecked(), true);
+    assert.equal(await previewAutoSwitch.isChecked(), true);
+    assert.equal(await previewInterval.inputValue(), '700');
     assert.deepEqual(errors, []);
-    console.log(`${browserName}: settings, badges, drag ordering/cancel/persistence, visible-order shortcuts, watch-later, responsive layout, themes, pagination, history and popular passed`);
+    console.log(`${browserName}: settings, badges, drag ordering/cancel/persistence, visible-order shortcuts, watch-later, responsive layout, themes, pagination, history, popular and hover previews (delay/auto/scrub/cache/cancellation/failures/parts) passed`);
     await context.close();
   } finally { await browser.close(); }
 }
