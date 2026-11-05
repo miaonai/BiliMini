@@ -6,7 +6,7 @@
         <div class="cover-frame">
           <img class="cover" :src="cardObj.media_cover" alt="" />
           <cover-preview v-if="previewEnabled && previewSettings && previewSettings.hoverPreview && cardObj.preview"
-            :target="cardObj.preview" :settings="previewSettings" :active="previewHovered" :position="previewPosition" :zoom="hoverZoom"
+            :target="cardObj.preview" :settings="previewSettings" :active="previewHovered" :position="previewPosition"
             @visibility-change="previewVisible = $event" />
         </div>
         <div v-if="cardObj.type_ !== 'live'" class="video-stats">

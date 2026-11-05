@@ -1,6 +1,6 @@
 <template>
   <div v-if="frame" class="preview" aria-hidden="true">
-    <div class="preview-image" :class="{ zoomed: zoom }" :style="frame.style" />
+    <div class="preview-image" :style="frame.style" />
     <span class="preview-time">{{ previewTime }}</span>
     <div class="preview-progress"><span :style="{ width: progress * 100 + '%' }" /></div>
   </div>
@@ -36,7 +36,7 @@ function loadSheet(url) {
 
 export default {
   name: 'CoverPreview',
-  props: ['target', 'settings', 'active', 'position', 'zoom'],
+  props: ['target', 'settings', 'active', 'position'],
   data() {
     return { frame: null, shot: null, progress: 0, pageVisible: !document.hidden,
       session: 0, frameRequest: 0, startTimer: null, tickTimer: null, startedAt: 0 };
@@ -129,10 +129,8 @@ export default {
 <style scoped>
 .preview { position: absolute; inset: 0; pointer-events: none; }
 .preview-image { position: absolute; inset: 0; background-color: #000; }
-.preview-image.zoomed { transform: scale(1.05); }
 .preview-time { position: absolute; right: 6px; bottom: 6px; z-index: 2; padding: 2px 4px; border-radius: 3px; background: #000b; color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
 .preview-progress { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 3px; background: #ffffff40; }
 .preview-progress span { display: block; height: 100%; background: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .preview-image.zoomed { transform: none; } }
 @container (max-width: 140px) { .preview-time { display: none; } }
 </style>
